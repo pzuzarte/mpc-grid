@@ -28,7 +28,7 @@ const state = {
   view: null,
   currentKey: 0,
   queuedKey: null,
-  bank: "used",
+  bank: 0,
   resolution: 240,
   baseResolution: 240,
   triplets: false,
@@ -247,7 +247,7 @@ async function loadView(view) {
   state.view = view;
   state.dirty = new Set();
   state.undo = [];
-  state.bank = "used";
+  state.bank = 0;
   state.queuedKey = null;
 
   const { draft } = await backend.readDraft({ name: draftName() });
