@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPC Grid</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <h1>MPC Grid</h1>
+  <label>Project
+    <select id="project"></select>
+  </label>
+  <button id="card" type="button">Connect card</button>
+  <span id="card-state" class="pill">Card: not connected</span>
+  <div class="spacer"></div>
+  <span id="midi-state" class="pill">MIDI: starting</span>
+</header>
+
+<section class="bar slots-bar" aria-label="Sequences">
+  <span class="group-label">Sequence</span>
+  <div id="slots" class="slots"></div>
+</section>
+
+<section class="bar transport" aria-label="Transport and pattern settings">
+  <button id="play" class="primary" type="button">Play</button>
+  <button id="send" type="button" title="Plays this pattern exactly once, with MIDI start, clock and stop, for the MPC to record">Send to MPC</button>
+  <label title="Sets playback speed from the laptop. It is not saved to the project.">Live BPM
+    <input id="bpm" type="number" min="20" max="300" step="0.1" value="120">
+  </label>
+  <label>Bars
+    <select id="bars"></select>
+  </label>
+  <div class="field" role="group" aria-labelledby="steps-label">
+    <span id="steps-label" class="group-label">Steps</span>
+    <div id="steps" class="segmented">
+      <button type="button" data-value="480">1/8</button>
+      <button type="button" data-value="240">1/16</button>
+      <button type="button" data-value="120">1/32</button>
+    </div>
+    <button id="triplets" class="toggle" type="button" aria-pressed="false" title="Three steps per beat division. Press T to switch.">Triplets</button>
+  </div>
+  <div class="field" role="group" aria-labelledby="repeat-label">
+    <span id="repeat-label" class="group-label" title="How many evenly spaced hits each new step plays. Alt-click a step to apply this to it.">Note repeat</span>
+    <div id="repeat" class="segmented">
+      <button type="button" data-value="1">Off</button>
+      <button type="button" data-value="2">2x</button>
+      <button type="button" data-value="3">3x</button>
+      <button type="button" data-value="4">4x</button>
+      <button type="button" data-value="6">6x</button>
+      <button type="button" data-value="8">8x</button>
+    </div>
+  </div>
+  <label>MIDI output
+    <select id="output"></select>
+  </label>
+  <label>Channel
+    <select id="channel"></select>
+  </label>
+  <label class="check" title="Set MIDI Sync In to MIDI Clock on the MPC to follow the laptop.">
+    <input id="clock" type="checkbox"> Send clock
+  </label>
+  <div class="spacer"></div>
+  <button id="undo" type="button" disabled>Undo</button>
+  <button id="duplicate" type="button" title="Copy this pattern to the next empty sequence">Duplicate</button>
+  <button id="clear" type="button">Clear</button>
+</section>
+
+<div class="grid-nav">
+  <nav id="banks" class="banks" aria-label="Pad banks"></nav>
+  <div id="pager" class="pager" hidden>
+    <button id="page-prev" type="button" aria-label="Previous bars">&lsaquo;</button>
+    <span id="page-label" aria-live="polite"></span>
+    <button id="page-next" type="button" aria-label="Next bars">&rsaquo;</button>
+  </div>
+</div>
+
+<main id="grid-wrap" class="grid-wrap">
+  <div id="grid" class="grid"></div>
+  <div id="playhead" class="playhead" hidden></div>
+</main>
+
+<div id="note-editor" class="note-editor" role="dialog" aria-labelledby="editor-title" hidden>
+  <h2 id="editor-title"></h2>
+  <p id="editor-hits" class="editor-hits" hidden></p>
+  <label class="editor-row" for="edit-velocity">Velocity
+    <input id="edit-velocity-range" type="range" min="1" max="127" aria-label="Velocity slider">
+    <input id="edit-velocity" type="number" min="1" max="127" step="1">
+  </label>
+  <label class="editor-row" for="edit-length" title="How long the note is held. 960 ticks is one beat.">Length
+    <span class="unit-note">ticks</span>
+    <input id="edit-length" type="number" min="1" step="1">
+  </label>
+  <label class="editor-row" for="edit-offset" title="How far after the start of the step the note plays. 960 ticks is one beat.">Timing
+    <span id="edit-offset-range" class="unit-note"></span>
+    <input id="edit-offset" type="number" min="0" step="1">
+  </label>
+  <label class="editor-row" for="edit-probability" title="The chance this note plays each time through the pattern.">Probability
+    <span class="unit-note">%</span>
+    <input id="edit-probability" type="number" min="0" max="100" step="1">
+  </label>
+  <div class="editor-actions">
+    <button id="edit-hear" type="button">Hear</button>
+    <button id="edit-delete" type="button">Delete</button>
+    <button id="edit-done" class="primary" type="button">Done</button>
+  </div>
+</div>
+
+<footer class="bar foot">
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+  <div class="spacer"></div>
+  <span id="dirty" class="dirty" hidden>Changes kept in this browser, not yet in a project</span>
+  <label>Save as
+    <input id="save-name" type="text" maxlength="64" spellcheck="false">
+  </label>
+  <button id="save" type="button">Save to new project</button>
+  <button id="to-card" type="button">Copy to card</button>
+  <button id="discard" type="button">Discard changes</button>
+</footer>
+<p class="hint">Click or drag: add or remove steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
+<script src="xpj.js"></script>
+<script src="backend.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

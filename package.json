@@ -1,0 +1,8 @@
+{
+  "name": "mpc-grid",
+  "private": true,
+  "description": "A step grid for the Akai MPC Sample that runs in the browser.",
+  "scripts": {
+    "test": "node --test "test/*.test.js""
+  }
+}
