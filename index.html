@@ -16,6 +16,7 @@
   <span id="card-state" class="pill">Card: not connected</span>
   <div class="spacer"></div>
   <span id="midi-state" class="pill">MIDI: starting</span>
+  <button id="help-open" type="button" title="Help (press ?)">Help</button>
 </header>
 
 <section class="bar slots-bar" aria-label="Sequences">
@@ -119,6 +120,107 @@
   <button id="discard" type="button">Discard changes</button>
 </footer>
 <p class="hint">Click or drag: add or remove steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
+<dialog id="help" class="help" aria-labelledby="help-title">
+  <div class="help-head">
+    <h2 id="help-title">MPC Grid help</h2>
+    <button id="help-close" type="button">Close</button>
+  </div>
+  <div class="help-body" tabindex="0">
+    <p>A step grid for the Akai MPC Sample. It plays the MPC live over USB and saves patterns into new copies of your projects. It doesn't change the MPC's firmware or your original projects, and your files aren't uploaded anywhere. It needs a current Chrome or Edge on a computer.</p>
+
+    <h3>Set up your MPC Sample</h3>
+    <ol>
+      <li>Connect the MPC to your computer with a USB-C data cable.</li>
+      <li>On the MPC, press <kbd>SHIFT</kbd> + <kbd>PAD 8</kbd> to open MIDI Configuration, then set <b>MIDI Port</b> to USB, <b>MIDI In Channel</b> to All and <b>Pad MIDI In</b> to On.</li>
+      <li>Load a project that has samples on its pads. Empty pads make no sound, even when MIDI is working.</li>
+      <li>In this page, allow MIDI access when asked. The MIDI badge turns green when the MPC is found.</li>
+      <li>Click a pad name in the grid. You should hear that pad on the MPC.</li>
+    </ol>
+
+    <h3>MIDI mode and SD mode</h3>
+    <p>The MPC can't do both at once:</p>
+    <ul>
+      <li><b>MIDI mode</b> (normal use): the grid can play the MPC, but it can't reach the card.</li>
+      <li><b>SD mode</b> (SD Card Access in the MPC's Project menu, <kbd>SHIFT</kbd> + <kbd>PAD 16</kbd>): the grid can reach the card, but it can't play the MPC.</li>
+    </ul>
+    <p>Once a project is open, it's kept in this browser, so you can edit and play it in MIDI mode. You only need SD mode to move projects.</p>
+    <p><b>Before leaving SD mode:</b> eject the card on your computer, then press <kbd>B1</kbd> on the MPC.</p>
+
+    <h3>Open a project from the MPC</h3>
+    <ol>
+      <li>On the MPC, save the project to the card. The grid can't see the MPC's internal storage.</li>
+      <li>Enter SD mode.</li>
+      <li>Click <b>Connect card</b> and choose your card. If the browser refuses it, choose the <code>MPC-Sample/Projects</code> folder on the card. You may need to allow access again on later visits.</li>
+      <li>Choose the project under <b>On the card</b> in the Project menu.</li>
+      <li>Eject the card and return to MIDI mode.</li>
+    </ol>
+
+    <h3>Save patterns to the MPC</h3>
+    <ol>
+      <li>Click <b>Save to new project</b>. This creates a new copy in this browser and leaves the original alone.</li>
+      <li>Enter SD mode, then click <b>Copy to card</b>. It never overwrites a project already on the card.</li>
+      <li>Eject the card, press <kbd>B1</kbd>, and load the new project on the MPC. Sequence slots 1-16 match pads 1-16 in the MPC's Sequence Mode.</li>
+    </ol>
+    <p><b>Unsaved patterns</b> are autosaved in this browser, and the yellow message shows they aren't in a project yet. <b>Discard changes</b> removes them.</p>
+    <p class="help-warning"><b>Keep your work on the card.</b> Clearing this browser's data for the site erases its projects and unsaved patterns, and they don't appear in other browsers.</p>
+
+    <h3>New samples on the MPC</h3>
+    <p>Sample names come from the saved project, because MIDI doesn't carry them. After loading samples, save the project to the card and enter SD mode. If that project is open here, its pad names update within a few seconds, your unsaved patterns are kept, and the previous copy is kept as a backup.</p>
+    <p>If you edit the same sequence in both places, your unsaved version here is the one that's kept.</p>
+
+    <h3>Mouse and keyboard</h3>
+    <table>
+      <tbody>
+        <tr><th scope="row">Click or drag on steps</th><td>Add or remove steps</td></tr>
+        <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
+        <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
+        <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
+        <tr><th scope="row">Click a pad name</th><td>Hear that pad on the MPC</td></tr>
+        <tr><th scope="row"><kbd>Space</kbd></th><td>Play and stop</td></tr>
+        <tr><th scope="row"><kbd>1</kbd>-<kbd>8</kbd></th><td>Switch to banks A-H</td></tr>
+        <tr><th scope="row"><kbd>T</kbd></th><td>Turn triplets on or off</td></tr>
+        <tr><th scope="row"><kbd>Cmd</kbd> or <kbd>Ctrl</kbd> + <kbd>Z</kbd></th><td>Undo</td></tr>
+        <tr><th scope="row"><kbd>?</kbd></th><td>Open this help</td></tr>
+        <tr><th scope="row"><kbd>Esc</kbd></th><td>Close the step editor or this help</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Buttons and settings</h3>
+    <table>
+      <tbody>
+        <tr><th scope="row">Project</th><td>Choose a project. "No project" gives you blank pads for live playing, but those patterns can't be saved into a project.</td></tr>
+        <tr><th scope="row">Connect card</th><td>Choose the card folder. The badge beside it shows whether the card is available.</td></tr>
+        <tr><th scope="row">Sequence 1-16</th><td>Switch patterns, or click an empty slot to start one. During playback, the new slot starts when the current loop ends.</td></tr>
+        <tr><th scope="row">Play</th><td>Play the pattern on the MPC, looping. Don't press play on the MPC as well.</td></tr>
+        <tr><th scope="row">Send to MPC</th><td>Experimental. Plays the pattern once, so the MPC can record it while SEQ RECORD is armed on an empty sequence. Set MIDI Sync In to MIDI Clock first. This hasn't been confirmed on the hardware.</td></tr>
+        <tr><th scope="row">Live BPM</th><td>Playback speed from this page. It isn't saved to the project.</td></tr>
+        <tr><th scope="row">Bars</th><td>Length of the current pattern. Shortening it removes notes past the new end, and Undo brings them back.</td></tr>
+        <tr><th scope="row">Steps and Triplets</th><td>Grid size: 1/8, 1/16 or 1/32. Triplets puts three steps where there were two.</td></tr>
+        <tr><th scope="row">Note repeat</th><td>New steps play 2-8 evenly spaced hits, drawn as bars in the step. They're saved as separate notes.</td></tr>
+        <tr><th scope="row">MIDI output and Channel</th><td>Where notes are sent. The MPC is chosen automatically when it's found.</td></tr>
+        <tr><th scope="row">Send clock</th><td>Sends MIDI start, stop and clock with playback. Set MIDI Sync In to MIDI Clock on the MPC to follow it.</td></tr>
+        <tr><th scope="row">Undo, Duplicate, Clear</th><td>Undo an edit, copy the pattern to the next empty slot, or remove all of its notes.</td></tr>
+        <tr><th scope="row">Pad banks</th><td>Banks A-H hold 16 pads each. A dot means the bank has notes in this pattern. "In use" shows pads with samples or notes from any bank.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Reading the grid</h3>
+    <ul>
+      <li><b>Brighter steps</b> are louder.</li>
+      <li><b>Bars inside a step</b> show its separate hits.</li>
+      <li><b>A white dot</b> means the note starts later than the beginning of the step.</li>
+      <li><b>A dashed outline</b> means less than 100% probability. It works during live playback here, but it hasn't been confirmed on the MPC after saving.</li>
+      <li><b>Arrows above the grid</b> appear when a long pattern needs paging, so steps stay large enough to click. Pages turn by themselves during playback.</li>
+    </ul>
+
+    <h3>If you hear nothing</h3>
+    <ul>
+      <li>Check that the MPC isn't in SD mode, and that the MIDI badge is green. Reload the page if the MPC was in SD mode when it opened.</li>
+      <li>Check the three MIDI settings above.</li>
+      <li>Hit the pad on the MPC itself, to confirm it has a sample and the volume is up.</li>
+    </ul>
+  </div>
+</dialog>
 <script src="xpj.js"></script>
 <script src="backend.js"></script>
 <script src="app.js"></script>

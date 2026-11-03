@@ -16,6 +16,9 @@ Back up projects you care about. It has been tested with MPC Sample firmware
 **Requires a current version of Google Chrome or Microsoft Edge.** Other browsers
 don't offer the MIDI and folder access it needs.
 
+The **Help** button in the page (or the ? key) explains setup, saving and every
+control.
+
 ## MPC settings for live play
 
 Connect the MPC by USB, press SHIFT + PAD 8 to open MIDI Configuration, then set:

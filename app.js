@@ -1186,6 +1186,12 @@ function drawPlayhead() {
 
 /* ---------- Controls ---------- */
 
+function openHelp() {
+  closeNoteEditor({ restoreFocus: false });
+  $("help").showModal();
+  document.querySelector(".help-body").scrollTop = 0;
+}
+
 function bindControls() {
   $("project").addEventListener("change", (event) => openProject(event.target.value));
   $("bars").addEventListener("change", (event) => setBars(Number(event.target.value)));
@@ -1229,6 +1235,12 @@ function bindControls() {
     renderGrid();
     markDirty();
   });
+  $("help-open").addEventListener("click", openHelp);
+  $("help-close").addEventListener("click", () => $("help").close());
+  // A click on the backdrop lands on the dialog itself, not its contents.
+  $("help").addEventListener("click", (event) => {
+    if (event.target === $("help")) $("help").close();
+  });
   $("card").addEventListener("click", connectCard);
   $("save").addEventListener("click", saveCopy);
   $("to-card").addEventListener("click", copyToCard);
@@ -1236,6 +1248,11 @@ function bindControls() {
 
   const typing = (target) => /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName);
   window.addEventListener("keydown", (event) => {
+    if ($("help").open) return;
+    if (event.key === "?" && !typing(event.target)) {
+      openHelp();
+      return;
+    }
     if (event.key === "Escape" && state.editor) {
       closeNoteEditor();
       return;
