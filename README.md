@@ -9,6 +9,10 @@ over USB MIDI, and save them into a new copy of a project as MPC sequences.
 It doesn't change the MPC's firmware or your original project files, and nothing
 is uploaded: your projects stay on your computer and your card.
 
+Visits to the page are counted anonymously with
+[GoatCounter](https://www.goatcounter.com/help/privacy), which uses no cookies and
+never receives your projects, samples or patterns.
+
 Unofficial and not affiliated with or endorsed by Akai Professional or inMusic.
 Back up projects you care about. It has been tested with MPC Sample firmware
 1.3.0.12.
