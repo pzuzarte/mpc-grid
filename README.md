@@ -51,10 +51,6 @@ The MPC only makes sound if the loaded project has samples on the pads you use.
   length and timing in ticks, and probability. A dashed outline marks a step with
   less than 100% probability. The grid honours probability during live playback;
   whether the MPC does after saving hasn't been confirmed.
-- The right-click editor can also change the pad's filter, resonance, tune and pan
-  on a step, marked with a blue corner. The change lasts for that step, then the
-  pad returns to normal. These play on the MPC after saving. During live playback,
-  only Pan can be previewed, and the preview moves the whole track.
 - Live volume and Live pan move the whole track on the MPC right away, using MIDI
   controllers 7 and 10. They aren't saved to the project. In tests, the MPC didn't
   respond live to filter, resonance or tuning over MIDI.

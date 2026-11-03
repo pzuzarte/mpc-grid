@@ -12,13 +12,6 @@ const Xpj = (() => {
   const DATA_SUFFIX = "_[ProjectData]";
   const SEQUENCE_SLOTS = 16;
   const MAX_BARS = 64;
-  const AUTOMATION_EVENT = 2;
-  // Parameter codes found by recording each one on an MPC Sample (firmware 1.3.0.12).
-  const PARAMETERS = {
-    filterCutoff: 514, filterResonance: 515, pan: 517, tune: 1043,
-  };
-  const KNOWN_PARAMETERS = Object.values(PARAMETERS);
-  const TUNE_SEMITONES = 36;
 
   class XpjError extends Error {}
 
@@ -135,28 +128,10 @@ const Xpj = (() => {
         sample = layer.sampleName || layer.name || "";
         if (sample) break;
       }
-      rows.push({ pad, note, sample, base: padBaseValues(instrument) });
+      rows.push({ pad, note, sample });
     });
     return rows;
   }
-
-  // Where each parameter sits on the pad, on the 0-1 scale automation uses.
-  function padBaseValues(instrument) {
-    const filter = ((instrument.synthSection || {}).filterData || {}).value0 || {};
-    const layer = (instrument.layersv || [])[0] || {};
-    const semitones = num(layer.coarseTune ?? 0) + num(layer.fineTune ?? 0) / 100;
-    const tune = (semitones + TUNE_SEMITONES) / (2 * TUNE_SEMITONES);
-    return {
-      [PARAMETERS.filterCutoff]: num(filter.filterCutoff ?? 1),
-      [PARAMETERS.filterResonance]: num(filter.filterResonance ?? 0),
-      [PARAMETERS.pan]: num((instrument.mixable || {}).pan ?? 0.5),
-      [PARAMETERS.tune]: Math.min(1, Math.max(0, tune)),
-    };
-  }
-
-  const isKnownAutomation = (event) =>
-    event.type === AUTOMATION_EVENT && event.automation
-      && KNOWN_PARAMETERS.includes(event.automation.parameter);
 
   // Track name -> clip, for the sequence's first clip row.
   function clips(sequence) {
@@ -173,18 +148,8 @@ const Xpj = (() => {
         || { beatsPerBar: 4, beatLength: 960 };
       const sequenceClips = clips(sequence);
       const notes = {};
-      const automation = {};
       for (const track of tracks) {
         const clip = sequenceClips[track.name];
-        automation[track.name] = (clip ? clip.eventList.events : [])
-          .filter(isKnownAutomation)
-          .map((event) => ({
-            time: event.time,
-            note: event.automation.note,
-            parameter: event.automation.parameter,
-            value: num(event.automation.value),
-            invented: Boolean(event.invented),
-          }));
         notes[track.name] = (clip ? clip.eventList.events : [])
           .filter((event) => event.type === NOTE_EVENT)
           .map((event) => ({
@@ -203,7 +168,6 @@ const Xpj = (() => {
         beatsPerBar: signature.beatsPerBar,
         beatLength: signature.beatLength,
         notes,
-        automation,
       };
     });
     sequences.sort((a, b) => a.key - b.key);
@@ -304,65 +268,6 @@ const Xpj = (() => {
     clip.eventList.events = kept;
   }
 
-  function cleanAutomation(raw, lengthPulses) {
-    const show = JSON.stringify(raw);
-    if (raw === null || typeof raw !== "object") throw new XpjError(`Bad automation: ${show}`);
-    const { time, note, parameter, value } = raw;
-    if (![time, note, parameter].every(Number.isInteger)) {
-      throw new XpjError(`Automation has a missing or non-integer value: ${show}`);
-    }
-    if (time < 0 || time >= lengthPulses) throw new XpjError(`Automation time is outside the sequence: ${show}`);
-    if (note < 0 || note > 127) throw new XpjError(`Automation note out of range: ${show}`);
-    if (!KNOWN_PARAMETERS.includes(parameter)) throw new XpjError(`Unknown automation parameter: ${show}`);
-    if (typeof value !== "number" || !(value >= 0 && value <= 1)) {
-      throw new XpjError(`Automation value out of range: ${show}`);
-    }
-    return { time, note, parameter, value, invented: Boolean(raw.invented) };
-  }
-
-  /* Replace one track's filter, resonance, pan and tune automation in a sequence.
-     Everything else is left in place, and unchanged events aren't touched. */
-  function setAutomation(project, sequenceKey, trackName, automation) {
-    const sequence = findSequence(project, sequenceKey);
-    const clip = clips(sequence)[trackName];
-    if (!clip) throw new XpjError(`No track named ${JSON.stringify(trackName)} in this sequence.`);
-    const cleaned = automation.map((item) => cleanAutomation(item, sequence.value.lengthPulses));
-
-    const keyOf = (time, note, parameter, value) => `${time}:${note}:${parameter}:${value}`;
-    const existing = new Map();
-    for (const event of clip.eventList.events.filter(isKnownAutomation)) {
-      const a = event.automation;
-      const key = keyOf(event.time, a.note, a.parameter, num(a.value));
-      if (!existing.has(key)) existing.set(key, []);
-      existing.get(key).push(event);
-    }
-    const keep = new Set();
-    const added = [];
-    for (const item of cleaned) {
-      const matches = existing.get(keyOf(item.time, item.note, item.parameter, item.value));
-      if (matches && matches.length) keep.add(matches.shift());
-      else added.push(item);
-    }
-    const events = clip.eventList.events.filter((e) => !isKnownAutomation(e) || keep.has(e));
-    added.sort((a, b) => a.time - b.time);
-    for (const item of added) {
-      // Automation goes ahead of notes at the same time, so a note hears its value.
-      let at = events.findIndex((e) => e.time > item.time || (e.time === item.time && e.type === NOTE_EVENT));
-      if (at < 0) at = events.length;
-      events.splice(at, 0, {
-        version: 2,
-        time: item.time,
-        type: AUTOMATION_EVENT,
-        channel: 0,
-        selected: false,
-        muted: false,
-        invented: item.invented,
-        automation: { note: item.note, value: toFloat(item.value), parameter: item.parameter },
-      });
-    }
-    clip.eventList.events = events;
-  }
-
   function pulsesPerBar(value) {
     const signature = value.timeSignatureTrack.timeSignatures[0];
     return signature.beatsPerBar * signature.beatLength;
@@ -434,10 +339,6 @@ const Xpj = (() => {
         setSequenceLength(project, edit.sequence, edit.lengthPulses);
       }
       setNotes(project, edit.sequence, edit.track, edit.notes);
-      if (edit.automation !== undefined) {
-        if (!Array.isArray(edit.automation)) throw new XpjError("Bad edit.");
-        setAutomation(project, edit.sequence, edit.track, edit.automation);
-      }
     }
   }
 
@@ -452,9 +353,7 @@ const Xpj = (() => {
 
   return {
     DATA_SUFFIX,
-    PARAMETERS,
     SEQUENCE_SLOTS,
-    setAutomation,
     XpjError,
     addSequence,
     applyEdits,

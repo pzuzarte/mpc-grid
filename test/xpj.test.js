@@ -43,9 +43,7 @@ test("a project that can't be reproduced exactly can be viewed but not saved", a
 test("view lists drum tracks, pads, notes and tempo as plain numbers", async () => {
   const view = Xpj.view(await makeProject());
   assert.deepEqual(view.tracks.map((t) => t.name), ["Drum 001"]);
-  assert.deepEqual(view.tracks[0].pads[0], {
-    pad: 0, note: 36, sample: "Kick", base: { 514: 1, 515: 0, 517: 0.5, 1043: 0.5 },
-  });
+  assert.deepEqual(view.tracks[0].pads[0], { pad: 0, note: 36, sample: "Kick" });
   assert.deepEqual(view.sequences[0].notes["Drum 001"], [
     { time: 0, note: 36, velocity: 1, length: 100, probability: 50 },
   ]);
@@ -209,99 +207,26 @@ test("edits can create, resize and fill a sequence", async () => {
     Xpj.XpjError);
 });
 
-test("automation is written ahead of notes, with float values, and read back", async () => {
-  const project = await makeProject();
-  Xpj.setAutomation(project, 0, "Drum 001", [
-    { time: 0, note: 36, parameter: 514, value: 1, invented: true },
-    { time: 960, note: 36, parameter: 514, value: 0.25 },
-    { time: 240, note: 36, parameter: 1043, value: 0.75 },
-  ]);
-  const events = eventsOf(project);
-  assert.deepEqual(events.map((e) => [e.time, e.type]), [[0, 1], [0, 2], [0, 3], [240, 2], [960, 2]]);
-  assert.equal(events[1].invented, true);
-  assert.equal(events[3].invented, false);
-  assert.equal(events[4].channel, 0);
-  const text = await textOf(project);
-  assert.ok(text.includes('"value": 1.0'));
-  const reread = Xpj.view(await Xpj.parse(await Xpj.serialise(project)));
-  assert.deepEqual(reread.sequences[0].automation["Drum 001"].map((a) => [a.time, a.parameter, a.value]),
-    [[0, 514, 1], [240, 1043, 0.75], [960, 514, 0.25]]);
-});
-
-test("replacing automation leaves other event types and unknown parameters alone", async () => {
-  const project = await makeProject();
-  const unknown = {
-    version: 2, time: 100, type: 2, channel: 0, automation: { note: 36, value: 0.5, parameter: 999 },
-  };
-  eventsOf(project).push(unknown);
-  Xpj.setAutomation(project, 0, "Drum 001", [{ time: 960, note: 36, parameter: 515, value: 0.5 }]);
-  Xpj.setAutomation(project, 0, "Drum 001", []);
-  const events = eventsOf(project);
-  assert.ok(events.includes(unknown));
-  assert.deepEqual(events.filter((e) => e !== unknown).map((e) => e.type), [1, 3]);
-});
-
-test("resending the same automation changes nothing at all", async () => {
-  const project = await makeProject();
-  Xpj.setAutomation(project, 0, "Drum 001", [
-    { time: 0, note: 36, parameter: 517, value: 0.5, invented: true },
-    { time: 480, note: 36, parameter: 517, value: 0.1 },
-  ]);
-  const saved = await Xpj.parse(await Xpj.serialise(project));
-  const before = await textOf(saved);
-  const view = Xpj.view(saved);
-  Xpj.applyEdits(saved, [{
-    sequence: 0,
-    track: "Drum 001",
-    notes: view.sequences[0].notes["Drum 001"],
-    automation: view.sequences[0].automation["Drum 001"],
-    lengthPulses: view.sequences[0].lengthPulses,
-  }]);
-  assert.equal(await textOf(saved), before);
-});
-
-test("bad automation is rejected without changing the project", async () => {
-  const good = { time: 0, note: 36, parameter: 514, value: 0.5 };
-  for (const item of [
-    { ...good, parameter: 131 },
-    { ...good, parameter: 999 },
-    { ...good, value: 1.5 },
-    { ...good, value: -0.1 },
-    { ...good, time: 7680 },
-    { ...good, note: 128 },
-    { ...good, time: 1.5 },
-    null,
-  ]) {
-    const project = await makeProject();
-    assert.throws(() => Xpj.setAutomation(project, 0, "Drum 001", [good, item]), Xpj.XpjError,
-      JSON.stringify(item));
-    assert.equal(await textOf(project), projectText());
-  }
-});
-
-test("shortening a sequence drops automation past the end", async () => {
-  const project = await makeProject();
-  Xpj.setAutomation(project, 0, "Drum 001", [{ time: 5000, note: 36, parameter: 514, value: 0.5 }]);
-  Xpj.setSequenceLength(project, 0, 3840);
-  assert.deepEqual(Xpj.view(project).sequences[0].automation["Drum 001"], []);
-});
-
-test("pad values are read from where the MPC stores them", async () => {
-  const project = await makeProject();
-  const instrument = project.data.tracks[0].program.drum.instruments[0];
-  instrument.layersv[0].coarseTune = -12;
-  instrument.mixable = { pan: 0.25 };
-  instrument.synthSection = { filterData: { value0: { filterCutoff: 0.4, filterResonance: 0.2 } } };
-  assert.deepEqual(Xpj.view(project).tracks[0].pads[0].base,
-    { 514: 0.4, 515: 0.2, 517: 0.25, 1043: 1 / 3 });
-});
-
 test("view includes the track's volume and pan", async () => {
   const project = await makeProject();
   project.data.tracks[0].volume = 0.5;
   project.data.tracks[0].pan = 0.25;
   const [track] = Xpj.view(project).tracks;
   assert.deepEqual([track.volume, track.pan], [0.5, 0.25]);
+});
+
+test("automation recorded on the MPC survives editing notes", async () => {
+  const project = await makeProject();
+  const recorded = {
+    version: 2, time: 480, type: 2, channel: 0, automation: { note: 36, value: 0.25, parameter: 514 },
+  };
+  eventsOf(project).push(recorded);
+  Xpj.setNotes(project, 0, "Drum 001", [
+    { time: 0, note: 36, velocity: 1, length: 100 },
+    { time: 960, note: 37, velocity: 1, length: 100 },
+  ]);
+  assert.ok(eventsOf(project).includes(recorded));
+  assert.deepEqual(eventsOf(project).map((e) => e.time), [0, 0, 480, 960]);
 });
 
 test("project names are checked", () => {
@@ -327,7 +252,6 @@ for (const name of realProjects) {
     for (const sequence of view.sequences) {
       for (const [track, notes] of Object.entries(sequence.notes)) {
         Xpj.setNotes(project, sequence.key, track, notes);
-        Xpj.setAutomation(project, sequence.key, track, sequence.automation[track]);
       }
     }
     assert.equal(await textOf(project), await gunzipText(bytes));
