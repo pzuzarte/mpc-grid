@@ -55,6 +55,9 @@ const state = {
   syncing: false,
   projectsSignature: "",
   sendOnce: false,
+  newLength: "step",
+  barsQueued: false,
+  lengthDrag: null,
 };
 
 function blankView() {
@@ -516,7 +519,9 @@ function renderGrid() {
     `var(--label-width) repeat(${stepCount}, minmax(0, 1fr))`;
   grid.style.gridTemplateRows =
     `20px repeat(${pads.length}, minmax(14px, 1fr))`;
-  grid.classList.toggle("dense", gridWidthForSteps() / stepCount < DENSE_CELL_PX);
+  const dense = gridWidthForSteps() / stepCount < DENSE_CELL_PX;
+  grid.classList.toggle("dense", dense);
+  grid.style.setProperty("--grid-gap", dense ? "1px" : "2px");
 
   const nodes = [];
   const corner = document.createElement("div");
@@ -598,6 +603,7 @@ function paintCell(cell) {
   const found = notesInCell(Number(cell.dataset.note), time);
   const on = found.length > 0;
   const hits = found.length;
+  queueNoteBars();
   cell.classList.toggle("on", on);
   cell.classList.toggle("repeat", hits > 1);
   cell.classList.toggle("off-grid", on && Math.min(...found.map((n) => n.time)) !== time);
@@ -617,6 +623,116 @@ function paintCell(cell) {
 
 function renderNotes() {
   document.querySelectorAll(".cell").forEach(paintCell);
+}
+
+/* ---------- Note lengths ---------- */
+
+// Many edits can happen in one moment, so bars are redrawn once per frame.
+function queueNoteBars() {
+  if (state.barsQueued) return;
+  state.barsQueued = true;
+  requestAnimationFrame(() => {
+    state.barsQueued = false;
+    renderNoteBars();
+  });
+}
+
+function renderNoteBars() {
+  document.querySelectorAll(".note-bar").forEach((bar) => bar.remove());
+  document.querySelectorAll(".cell.has-bar").forEach((cell) => cell.classList.remove("has-bar"));
+  const start = state.windowStart;
+  const end = start + state.windowSpan;
+  for (const note of trackNotes()) {
+    const noteEnd = note.time + note.length;
+    if (noteEnd <= start || note.time >= end) continue;
+    const cellTime = Math.floor(note.time / state.resolution) * state.resolution;
+    // Repeats are drawn as hits inside the step, not as a bar.
+    if (notesInCell(note.note, cellTime).length > 1) continue;
+    const anchorTime = Math.max(cellTime, start);
+    const cell = cellElement(note.note, anchorTime);
+    if (!cell) continue;
+
+    const barStart = Math.max(note.time, start);
+    const barEnd = Math.min(noteEnd, end);
+    const steps = (barEnd - barStart) / state.resolution;
+    const bar = document.createElement("span");
+    bar.className = "note-bar";
+    bar.style.setProperty("--steps", String(steps));
+    bar.style.setProperty("--gaps", String(Math.max(0, Math.ceil(steps) - 1)));
+    bar.style.left = `${((barStart - anchorTime) / state.resolution) * 100}%`;
+    bar.style.setProperty("--velocity", String(0.3 + 0.7 * note.velocity));
+    // A note that runs on past this page can't be resized from here.
+    if (noteEnd <= end) {
+      const handle = document.createElement("span");
+      handle.className = "note-handle";
+      handle.title = "Drag to change where this note ends. Hold Alt for finer control.";
+      bar.append(handle);
+    }
+    cell.append(bar);
+    if (note.time === barStart) cell.classList.add("has-bar");
+  }
+}
+
+function describeLength(length) {
+  const steps = length / state.resolution;
+  const shown = Number.isInteger(steps) ? String(steps) : steps.toFixed(2);
+  return `${shown} ${steps === 1 ? "step" : "steps"}`;
+}
+
+function newNoteLength(time) {
+  const seq = sequence();
+  const lengths = {
+    step: state.resolution,
+    beat: seq.beatLength,
+    bar: pulsesPerBar(seq),
+    "2bars": 2 * pulsesPerBar(seq),
+    "4bars": 4 * pulsesPerBar(seq),
+  };
+  return Math.min(lengths[state.newLength], seq.lengthPulses - time);
+}
+
+function startLengthDrag(event, handle) {
+  const cell = handle.closest(".cell");
+  const note = Number(cell.dataset.note);
+  const anchorTime = Number(cell.dataset.time);
+  const found = trackNotes().find((n) => n.note === note
+    && n.time < anchorTime + state.resolution && n.time + n.length > anchorTime);
+  if (!found) return;
+  remember();
+  state.lengthDrag = { note: found, anchorTime, cell };
+  event.preventDefault();
+}
+
+function moveLengthDrag(event) {
+  const { note, anchorTime, cell, drawing } = state.lengthDrag;
+  const box = cell.getBoundingClientRect();
+  // A click that stays on its step keeps the New note length.
+  if (drawing && !state.lengthDrag.moved) {
+    if (event.clientX <= box.right) return;
+    state.lengthDrag.moved = true;
+  }
+  const gap = parseFloat(getComputedStyle($("grid")).getPropertyValue("--grid-gap")) || 0;
+  const perStep = box.width + gap;
+  const pointer = anchorTime + ((event.clientX - box.left) / perStep) * state.resolution;
+  const windowEnd = state.windowStart + state.windowSpan;
+  // Snaps to steps, so a cut lands exactly on the grid. Alt gives single ticks.
+  let end = event.altKey
+    ? Math.round(pointer)
+    : Math.round(pointer / state.resolution) * state.resolution;
+  const shortest = event.altKey ? note.time + 1
+    : Math.floor(note.time / state.resolution) * state.resolution + state.resolution;
+  end = Math.max(shortest, Math.min(end, windowEnd, sequence().lengthPulses));
+  const length = end - note.time;
+  if (length !== note.length) {
+    note.length = length;
+    renderNoteBars();
+  }
+  setStatus(`Length: ${describeLength(length)} (${length} ticks).`);
+}
+
+function endLengthDrag() {
+  state.lengthDrag = null;
+  markDirty();
 }
 
 function renderChrome() {
@@ -755,7 +871,7 @@ function setCell(cell, on) {
 function addHits(note, time, velocity) {
   const notes = trackNotes();
   const spacing = state.resolution / state.repeat;
-  const length = Math.max(1, Math.round(Math.min(spacing, 240)));
+  const length = state.repeat > 1 ? Math.max(1, Math.round(spacing)) : newNoteLength(time);
   for (let hit = 0; hit < state.repeat; hit += 1) {
     notes.push({ time: Math.round(time + hit * spacing), note, velocity, length });
   }
@@ -844,6 +960,7 @@ function fillNoteEditor() {
   $("edit-velocity-range").value = velocity;
   $("edit-length").value = first.length;
   $("edit-length").max = sequence().lengthPulses;
+  $("edit-length-steps").textContent = `ticks, ${describeLength(first.length)}`;
   const maxOffset = maxEditorOffset(found);
   $("edit-offset").value = Math.min(...found.map((n) => n.time)) - state.editor.time;
   $("edit-offset").max = maxOffset;
@@ -913,6 +1030,7 @@ function bindNoteEditor() {
   $("edit-length").addEventListener("input", () => {
     editorNumber("edit-length", 1, sequence().lengthPulses, (value) => {
       changeEditorNotes((found) => found.forEach((n) => { n.length = value; }));
+      $("edit-length-steps").textContent = `ticks, ${describeLength(value)}`;
     });
   });
   $("edit-offset").addEventListener("input", () => {
@@ -964,7 +1082,16 @@ function bindGridEvents() {
     const cell = event.target.closest(".cell");
     if (cell) openNoteEditor(cell);
   });
+  window.addEventListener("pointermove", (event) => {
+    if (state.lengthDrag) moveLengthDrag(event);
+  });
   grid.addEventListener("pointerdown", (event) => {
+    const handle = event.target.closest(".note-handle");
+    if (handle && event.button === 0 && !event.ctrlKey) {
+      if (state.editor) closeNoteEditor({ restoreFocus: false });
+      startLengthDrag(event, handle);
+      return;
+    }
     const cell = event.target.closest(".cell");
     // Control-click is a right-click on a Mac and opens the editor instead.
     if (!cell || event.button !== 0 || event.ctrlKey) return;
@@ -984,10 +1111,18 @@ function bindGridEvents() {
     }
     remember();
     const on = !cell.classList.contains("on");
-    state.paint = { on };
     setCell(cell, on);
     markDirty();
     if (on) audition(Number(cell.dataset.note));
+    // Dragging draws one note at the dragged length. Cmd-drag fills separate steps,
+    // and repeats always do, because their hits have a fixed spacing.
+    const drawing = on && !event.metaKey && state.repeat === 1;
+    if (drawing) {
+      const [note] = notesInCell(Number(cell.dataset.note), Number(cell.dataset.time));
+      state.lengthDrag = { note, anchorTime: Number(cell.dataset.time), cell, drawing: true };
+    } else {
+      state.paint = { on };
+    }
   });
   grid.addEventListener("pointerover", (event) => {
     const cell = event.target.closest(".cell");
@@ -997,6 +1132,7 @@ function bindGridEvents() {
     }
   });
   window.addEventListener("pointerup", () => {
+    if (state.lengthDrag) endLengthDrag();
     if (state.paint) scheduleDraft();
     state.paint = null;
   });
@@ -1220,6 +1356,9 @@ function bindControls() {
     if (!button) return;
     state.repeat = Number(button.dataset.value);
     renderStepControls();
+  });
+  $("new-length").addEventListener("change", (event) => {
+    state.newLength = event.target.value;
   });
   $("live-volume").addEventListener("input", (event) => {
     sendController(CC_VOLUME, Number(event.target.value));

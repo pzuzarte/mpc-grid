@@ -47,6 +47,11 @@ The MPC only makes sound if the loaded project has samples on the pads you use.
 - Note repeat makes each new step play 2-8 evenly spaced hits, drawn as bars in
   the step. Alt-click an existing step to apply the current setting to it. These
   are saved as ordinary notes, so the MPC plays and shows them as separate hits.
+- Each note's length is drawn as a bar. Drag from an empty step to draw a note of
+  any length, or drag the end of a bar to change it. This is useful for cutting
+  loops at an exact point when the pad is set to Note On. It snaps to the grid, or
+  hold Alt for single ticks. Clicking adds a step at the New note length, and
+  Cmd-drag fills separate steps.
 - Right-click a step (or Control-click on a Mac) to edit its velocity (1-127),
   length and timing in ticks, and probability. A dashed outline marks a step with
   less than 100% probability. The grid honours probability during live playback;
