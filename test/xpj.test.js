@@ -296,6 +296,14 @@ test("pad values are read from where the MPC stores them", async () => {
     { 514: 0.4, 515: 0.2, 517: 0.25, 1043: 1 / 3 });
 });
 
+test("view includes the track's volume and pan", async () => {
+  const project = await makeProject();
+  project.data.tracks[0].volume = 0.5;
+  project.data.tracks[0].pan = 0.25;
+  const [track] = Xpj.view(project).tracks;
+  assert.deepEqual([track.volume, track.pan], [0.5, 0.25]);
+});
+
 test("project names are checked", () => {
   assert.equal(Xpj.cleanName(" song v2.xpj "), "song v2");
   for (const name of ["../evil", "a/b", "", ".hidden", "a".repeat(80)]) {

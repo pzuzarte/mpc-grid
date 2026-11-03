@@ -92,6 +92,8 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 
 .field { display: inline-flex; align-items: center; gap: 6px; }
 
+.live-slider { width: 76px; accent-color: var(--accent); }
+
 .segmented { display: inline-flex; }
 .segmented button { padding: 0 9px; border-radius: 0; margin-left: -1px; }
 .segmented button:first-child { margin-left: 0; border-radius: 5px 0 0 5px; }

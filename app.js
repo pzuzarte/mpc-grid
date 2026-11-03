@@ -12,6 +12,10 @@ const BAR_CHOICES = [1, 2, 4, 8];
 const BLANK_PATH = "";
 const BLANK_DRAFT = "live-patterns";
 const BLANK_TRACK = "Pads";
+const CC_VOLUME = 7;
+const CC_PAN = 10;
+const PAN_PARAMETER = 517;
+const PAN_CENTRE = 64;
 const PAD_PARAMETERS = {
   "edit-filter": { parameter: 514, toValue: (v) => v / 100, fromValue: (v) => v * 100, low: 0, high: 100 },
   "edit-resonance": { parameter: 515, toValue: (v) => v / 100, fromValue: (v) => v * 100, low: 0, high: 100 },
@@ -58,6 +62,7 @@ const state = {
   syncing: false,
   projectsSignature: "",
   sendOnce: false,
+  panPreviewActive: false,
 };
 
 function blankView() {
@@ -68,7 +73,7 @@ function blankView() {
   return {
     bpm: 120,
     currentSequence: 0,
-    tracks: [{ name: BLANK_TRACK, pads }],
+    tracks: [{ name: BLANK_TRACK, pads, volume: 0.7079457640647888, pan: 0.5 }],
     sequences: [makeSequence(0, 2, 120, 4, PPQ, BLANK_TRACK)],
   };
 }
@@ -280,6 +285,9 @@ async function loadView(view) {
   state.currentKey = (wanted || state.view.sequences[0]).key;
   const bpm = view.bpm ?? sequence().bpm;
   $("bpm").value = Math.round(bpm * 10) / 10;
+  // Shows the project's mix. Nothing is sent until a slider is moved.
+  $("live-volume").value = Math.round(track().volume * 127);
+  $("live-pan").value = Math.round(track().pan * 127);
   $("save-name").value = isBlank() ? "" : nextSaveName(state.projectName);
   renderAll();
 }
@@ -1174,6 +1182,26 @@ function audition(note, velocity = 1.0) {
   sendNote(note, velocity, performance.now(), 120);
 }
 
+function sendController(number, value, atTime) {
+  if (!state.output) return;
+  const message = [0xB0 | state.channel, number, Math.max(0, Math.min(127, Math.round(value)))];
+  if (atTime === undefined) state.output.send(message);
+  else state.output.send(message, atTime);
+}
+
+// The MPC has one pan per track over MIDI, so a step's pan is previewed as an offset
+// from the Live pan slider.
+function previewPanValue(event) {
+  const offset = (event.value - padBase(event.note, PAN_PARAMETER)) * 127;
+  return Number($("live-pan").value) + offset;
+}
+
+function endPanPreview() {
+  if (!state.panPreviewActive) return;
+  state.panPreviewActive = false;
+  sendController(CC_PAN, Number($("live-pan").value));
+}
+
 /* ---------- Playback ---------- */
 
 const ticker = new Worker(URL.createObjectURL(new Blob(
@@ -1196,6 +1224,15 @@ function schedule() {
     const to = from + CHUNK_PULSES;
     if (sendingClock() && from % CLOCK_PULSES === 0 && state.output) {
       state.output.send([0xF8], state.nextTime);
+    }
+    // Sent ahead of the notes, so a hit is heard with its pan.
+    if (!state.sendOnce) {
+      for (const event of automationOf(seq)) {
+        if (event.parameter === PAN_PARAMETER && event.time >= from && event.time < to) {
+          sendController(CC_PAN, previewPanValue(event), state.nextTime + (event.time - from) * ms);
+          state.panPreviewActive = true;
+        }
+      }
     }
     for (const note of notesOf(seq)) {
       if (note.time >= from && note.time < to
@@ -1261,6 +1298,7 @@ function stop() {
   state.queuedKey = null;
   if (!state.playing) return;
   if (sendingClock() && state.output) state.output.send([0xFC]);
+  endPanPreview();
   state.playing = false;
   state.sendOnce = false;
   $("play").textContent = "Play";
@@ -1315,6 +1353,16 @@ function bindControls() {
     state.repeat = Number(button.dataset.value);
     renderStepControls();
   });
+  $("live-volume").addEventListener("input", (event) => {
+    sendController(CC_VOLUME, Number(event.target.value));
+  });
+  $("live-pan").addEventListener("input", (event) => {
+    sendController(CC_PAN, Number(event.target.value));
+  });
+  $("live-pan").addEventListener("dblclick", () => {
+    $("live-pan").value = PAN_CENTRE;
+    sendController(CC_PAN, PAN_CENTRE);
+  });
   $("page-prev").addEventListener("click", () => goToPage(state.page - 1));
   $("page-next").addEventListener("click", () => goToPage(state.page + 1));
   let resizeTimer = null;
@@ -1365,7 +1413,7 @@ function bindControls() {
       closeNoteEditor();
       return;
     }
-    if (typing(event.target) || event.target.closest("#note-editor")) return;
+    if (typing(event.target) || event.target.closest?.("#note-editor")) return;
     if (event.code === "Space") {
       event.preventDefault();
       if (state.playing) stop(); else play();

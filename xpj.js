@@ -211,7 +211,12 @@ const Xpj = (() => {
       firmware: project.header[1],
       bpm: data.masterTempoEnabled ? num(data.masterTempo) : null,
       currentSequence: data.currentSequence,
-      tracks: tracks.map((track) => ({ name: track.name, pads: padRows(track) })),
+      tracks: tracks.map((track) => ({
+        name: track.name,
+        pads: padRows(track),
+        volume: num(track.volume ?? 0.7079457640647888),
+        pan: num(track.pan ?? 0.5),
+      })),
       sequences,
       canSave: project.lossless,
     };
