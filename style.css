@@ -220,6 +220,16 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
   opacity: var(--velocity, 1);
 }
 .cell.chance { outline: 1px dashed #fff; outline-offset: -3px; }
+.cell.pad-change::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid #58c7ff;
+}
 .cell.editing { box-shadow: 0 0 0 2px #fff; z-index: 1; }
 .cell.off-grid::after {
   content: "";
@@ -244,7 +254,9 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .note-editor {
   position: fixed;
   z-index: 10;
-  width: 280px;
+  width: 300px;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
   padding: 12px;
   background: var(--panel-2);
   border: 1px solid var(--muted);
@@ -264,6 +276,10 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .editor-row input[type="number"] { width: 72px; margin-left: auto; background: var(--bg); }
 .editor-row input[aria-invalid="true"] { border-color: #ff8f88; }
 .unit-note { color: var(--muted); font-size: 11px; }
+.editor-pad { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.editor-pad-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
+.editor-pad-title .unit-note { font-weight: 400; }
+.editor-pad-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.35; }
 .editor-actions { display: flex; gap: 6px; margin-top: 10px; }
 .editor-actions #edit-done { margin-left: auto; }
 

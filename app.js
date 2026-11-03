@@ -12,6 +12,12 @@ const BAR_CHOICES = [1, 2, 4, 8];
 const BLANK_PATH = "";
 const BLANK_DRAFT = "live-patterns";
 const BLANK_TRACK = "Pads";
+const PAD_PARAMETERS = {
+  "edit-filter": { parameter: 514, toValue: (v) => v / 100, fromValue: (v) => v * 100, low: 0, high: 100 },
+  "edit-resonance": { parameter: 515, toValue: (v) => v / 100, fromValue: (v) => v * 100, low: 0, high: 100 },
+  "edit-tune": { parameter: 1043, toValue: (v) => (v + 36) / 72, fromValue: (v) => v * 72 - 36, low: -36, high: 36 },
+  "edit-pan": { parameter: 517, toValue: (v) => (v + 100) / 200, fromValue: (v) => v * 200 - 100, low: -100, high: 100 },
+};
 const MIN_CELL_PX = 14; // Below this, steps are too small to click reliably.
 const DENSE_CELL_PX = 22;
 const LAST_PROJECT_KEY = "mpc-grid-last-project";
@@ -76,6 +82,7 @@ function makeSequence(key, bars, bpm, beatsPerBar, beatLength, trackName) {
     beatsPerBar,
     beatLength,
     notes: { [trackName]: [] },
+    automation: { [trackName]: [] },
     isNew: true,
   };
 }
@@ -86,6 +93,11 @@ const sequenceByKey = (key) => state.view.sequences.find((s) => s.key === key);
 const sequence = () => sequenceByKey(state.currentKey);
 const notesOf = (seq) => seq.notes[track().name] || [];
 const trackNotes = () => notesOf(sequence());
+function automationOf(seq) {
+  seq.automation ??= {};
+  seq.automation[track().name] ??= [];
+  return seq.automation[track().name];
+}
 const pulsesPerBar = (seq = sequence()) => seq.beatsPerBar * seq.beatLength;
 
 function padId(pad) {
@@ -298,6 +310,7 @@ async function saveCopy() {
       sequence: key,
       track: track().name,
       notes: notesOf(seq),
+      automation: automationOf(seq),
       lengthPulses: seq.lengthPulses,
     };
     if (seq.isNew) edit.create = true;
@@ -596,6 +609,7 @@ function paintCell(cell) {
   cell.classList.toggle("repeat", hits > 1);
   cell.classList.toggle("off-grid", on && Math.min(...found.map((n) => n.time)) !== time);
   cell.classList.toggle("chance", found.some((n) => (n.probability ?? 100) < 100));
+  cell.classList.toggle("pad-change", cellHasPadChange(Number(cell.dataset.note), time));
   cell.setAttribute("aria-pressed", String(on));
   cell.setAttribute("aria-label",
     `Pad ${cell.dataset.pad}, pulse ${time}${on ? `, on${hits > 1 ? `, ${hits} hits` : ""}` : ""}`);
@@ -696,6 +710,7 @@ function setBars(bars) {
   remember();
   seq.lengthPulses = length;
   seq.notes[track().name] = notesOf(seq).filter((n) => n.time < length);
+  seq.automation[track().name] = automationOf(seq).filter((a) => a.time < length);
   if (state.nextPulse >= length) state.nextPulse = 0;
   markDirty();
   renderGrid();
@@ -709,6 +724,7 @@ function remember() {
     key: seq.key,
     lengthPulses: seq.lengthPulses,
     notes: JSON.stringify(notesOf(seq)),
+    automation: JSON.stringify(automationOf(seq)),
     dirtyBefore: state.dirty.has(seq.key),
   });
   if (state.undo.length > 200) state.undo.shift();
@@ -726,6 +742,8 @@ function undo() {
   const seq = sequenceByKey(last.key);
   seq.lengthPulses = last.lengthPulses;
   seq.notes[track().name] = JSON.parse(last.notes);
+  automationOf(seq);
+  seq.automation[track().name] = JSON.parse(last.automation);
   if (!last.dirtyBefore) state.dirty.delete(last.key);
   state.currentKey = last.key;
   renderAll();
@@ -741,8 +759,74 @@ function setCell(cell, on) {
     addHits(note, time, 1.0);
   } else if (!on && existing.length) {
     seq.notes[track().name] = trackNotes().filter((n) => !existing.includes(n));
+    clearCellPadChanges(note, time);
   }
   paintCell(cell);
+}
+
+/* ---------- Pad changes on a step (filter, resonance, tune, pan) ---------- */
+
+function padBase(note, parameter) {
+  const pad = track().pads.find((p) => p.note === note);
+  const defaults = { 514: 1, 515: 0, 517: 0.5, 1043: 0.5 };
+  return pad && pad.base ? pad.base[parameter] : defaults[parameter];
+}
+
+const lane = (note, parameter) => automationOf(sequence())
+  .filter((a) => a.note === note && a.parameter === parameter)
+  .sort((a, b) => a.time - b.time);
+
+const sameValue = (a, b) => Math.abs(a - b) < 0.0005;
+
+function cellPadChange(note, parameter, time) {
+  const inCell = lane(note, parameter)
+    .filter((a) => a.time >= time && a.time < time + state.resolution);
+  // A value equal to the pad's normal one is only a return to normal.
+  const change = inCell.find((a) => !sameValue(a.value, padBase(note, parameter)));
+  return change ? change.value : null;
+}
+
+function cellHasPadChange(note, time) {
+  return Object.values(PAD_PARAMETERS)
+    .some(({ parameter }) => cellPadChange(note, parameter, time) !== null);
+}
+
+/* Sets one parameter for one step, or clears it with null. The value lasts for
+   that step: the pad returns to normal at the next one. The MPC holds a value until
+   the next event, and starts a sequence from an event at time 0. */
+function setPadChange(note, parameter, time, value) {
+  const seq = sequence();
+  const base = padBase(note, parameter);
+  const end = time + state.resolution;
+  let events = lane(note, parameter).filter((a) => a.time < time || a.time >= end);
+  const inForce = (at) => {
+    const earlier = events.filter((a) => a.time <= at);
+    return earlier.length ? earlier[earlier.length - 1].value : base;
+  };
+  const add = (at, newValue) => {
+    events = events.filter((a) => a.time !== at);
+    events.push({ time: at, note, parameter, value: newValue, invented: at === 0 });
+  };
+  if (value !== null) {
+    add(time, value);
+    if (end < seq.lengthPulses && !events.some((a) => a.time === end)) add(end, base);
+  } else if (!sameValue(inForce(time), base)) {
+    add(time, base);
+  }
+  if (events.length && !events.some((a) => a.time === 0)) add(0, base);
+
+  // Events that repeat the value already in force change nothing.
+  events.sort((a, b) => a.time - b.time);
+  const needed = events.filter((a, i) => i === 0 || !sameValue(a.value, events[i - 1].value));
+  const onlyNormal = needed.length === 1 && sameValue(needed[0].value, base);
+  const others = automationOf(seq).filter((a) => a.note !== note || a.parameter !== parameter);
+  seq.automation[track().name] = onlyNormal ? others : [...others, ...needed];
+}
+
+function clearCellPadChanges(note, time) {
+  for (const { parameter } of Object.values(PAD_PARAMETERS)) {
+    if (cellPadChange(note, parameter, time) !== null) setPadChange(note, parameter, time, null);
+  }
 }
 
 // Note repeat writes real notes, so it plays back on the MPC exactly as shown.
@@ -846,6 +930,15 @@ function fillNoteEditor() {
   for (const id of ["edit-velocity", "edit-length", "edit-offset", "edit-probability"]) {
     $(id).setAttribute("aria-invalid", "false");
   }
+  // Without a project there's nothing for these to be saved into.
+  $("editor-pad").hidden = isBlank();
+  for (const [id, control] of Object.entries(PAD_PARAMETERS)) {
+    const value = cellPadChange(state.editor.note, control.parameter, state.editor.time);
+    $(id).value = value === null ? "" : Math.round(control.fromValue(value));
+    $(id).placeholder = String(Math.round(
+      control.fromValue(padBase(state.editor.note, control.parameter))));
+    $(id).setAttribute("aria-invalid", "false");
+  }
 }
 
 // Notes must stay inside their step, or they would leave the step being edited.
@@ -917,6 +1010,19 @@ function bindNoteEditor() {
       changeEditorNotes((found) => found.forEach((n) => { n.probability = value; }));
     });
   });
+  for (const [id, control] of Object.entries(PAD_PARAMETERS)) {
+    $(id).addEventListener("input", () => {
+      const { note, time } = state.editor;
+      if ($(id).value === "") {
+        $(id).setAttribute("aria-invalid", "false");
+        changeEditorNotes(() => setPadChange(note, control.parameter, time, null));
+        return;
+      }
+      editorNumber(id, control.low, control.high, (value) => {
+        changeEditorNotes(() => setPadChange(note, control.parameter, time, control.toValue(value)));
+      });
+    });
+  }
   // Leaving a field with a bad value puts back the value actually in use.
   $("note-editor").addEventListener("focusout", (event) => {
     if (state.editor && event.target.getAttribute("aria-invalid") === "true") fillNoteEditor();
@@ -930,6 +1036,7 @@ function bindNoteEditor() {
   $("edit-delete").addEventListener("click", () => {
     changeEditorNotes((found) => {
       sequence().notes[track().name] = trackNotes().filter((n) => !found.includes(n));
+      clearCellPadChanges(state.editor.note, state.editor.time);
     });
     closeNoteEditor();
   });
@@ -1229,9 +1336,10 @@ function bindControls() {
   $("undo").addEventListener("click", undo);
   $("duplicate").addEventListener("click", duplicateSequence);
   $("clear").addEventListener("click", () => {
-    if (!trackNotes().length) return;
+    if (!trackNotes().length && !automationOf(sequence()).length) return;
     remember();
     sequence().notes[track().name] = [];
+    sequence().automation[track().name] = [];
     renderGrid();
     markDirty();
   });

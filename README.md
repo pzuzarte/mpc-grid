@@ -51,6 +51,10 @@ The MPC only makes sound if the loaded project has samples on the pads you use.
   length and timing in ticks, and probability. A dashed outline marks a step with
   less than 100% probability. The grid honours probability during live playback;
   whether the MPC does after saving hasn't been confirmed.
+- The right-click editor can also change the pad's filter, resonance, tune and pan
+  on a step, marked with a blue corner. The change lasts for that step, then the
+  pad returns to normal. These play on the MPC after saving, not during live
+  playback from the page.
 - The grid resizes to fit the window. If steps would be too small to click, it
   shows fewer bars at a time with arrows to move between them, and follows the
   playhead during playback.

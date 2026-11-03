@@ -106,6 +106,26 @@
     <span class="unit-note">%</span>
     <input id="edit-probability" type="number" min="0" max="100" step="1">
   </label>
+  <div id="editor-pad" class="editor-pad">
+    <p class="editor-pad-title">Pad sound on this step <span class="unit-note">blank = normal</span></p>
+    <label class="editor-row" for="edit-filter">Filter
+      <span class="unit-note">0-100%</span>
+      <input id="edit-filter" type="number" min="0" max="100" step="1" data-parameter="514">
+    </label>
+    <label class="editor-row" for="edit-resonance">Resonance
+      <span class="unit-note">0-100%</span>
+      <input id="edit-resonance" type="number" min="0" max="100" step="1" data-parameter="515">
+    </label>
+    <label class="editor-row" for="edit-tune">Tune
+      <span class="unit-note">-36 to 36 semitones</span>
+      <input id="edit-tune" type="number" min="-36" max="36" step="1" data-parameter="1043">
+    </label>
+    <label class="editor-row" for="edit-pan">Pan
+      <span class="unit-note">-100 left, 100 right</span>
+      <input id="edit-pan" type="number" min="-100" max="100" step="1" data-parameter="517">
+    </label>
+    <p class="editor-pad-note">Plays on the MPC after saving. Live playback from this page doesn't include it.</p>
+  </div>
   <div class="editor-actions">
     <button id="edit-hear" type="button">Hear</button>
     <button id="edit-delete" type="button">Delete</button>
@@ -178,7 +198,7 @@
     <table>
       <tbody>
         <tr><th scope="row">Click or drag on steps</th><td>Add or remove steps</td></tr>
-        <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
+        <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability, plus the pad's filter, resonance, tune and pan on that step. On an empty step, this adds the step first.</td></tr>
         <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
         <tr><th scope="row">Click a pad name</th><td>Hear that pad on the MPC</td></tr>
@@ -216,6 +236,7 @@
       <li><b>Bars inside a step</b> show its separate hits.</li>
       <li><b>A white dot</b> means the note starts later than the beginning of the step.</li>
       <li><b>A dashed outline</b> means less than 100% probability. It works during live playback here, but it hasn't been confirmed on the MPC after saving.</li>
+      <li><b>A blue corner</b> means the pad's filter, resonance, tune or pan changes on that step. The change lasts for that step, then the pad returns to normal. You'll hear it on the MPC after saving and loading the project, not during live playback from this page. Changes recorded on the MPC show here too.</li>
       <li><b>Arrows above the grid</b> appear when a long pattern needs paging, so steps stay large enough to click. Pages turn by themselves during playback.</li>
     </ul>
 
