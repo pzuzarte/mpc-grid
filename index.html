@@ -55,7 +55,7 @@
     </div>
     <button id="triplets" class="toggle" type="button" aria-pressed="false" title="Three steps per beat division. Press T to switch.">Triplets</button>
   </div>
-  <label title="How long a clicked step lasts. Drag from an empty step to draw any length, or drag the end of a bar to change one.">New note length
+  <label title="How long a clicked step lasts. Drag from an empty step to draw any length, or drag a note to change it.">New note length
     <select id="new-length">
       <option value="step" selected>1 step</option>
       <option value="beat">1 beat</option>
@@ -141,7 +141,7 @@
   <button id="to-card" type="button">Copy to card</button>
   <button id="discard" type="button">Discard changes</button>
 </footer>
-<p class="hint">Click: add or remove a step. Drag from an empty step: draw a longer note. Drag a bar's end: resize. Cmd-drag: fill steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
+<p class="hint">Click: add or remove a step. Drag from an empty step: draw a note. Drag a note: change its length. Cmd-drag: fill steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
 <dialog id="help" class="help" aria-labelledby="help-title">
   <div class="help-head">
     <h2 id="help-title">MPC Grid help</h2>
@@ -197,7 +197,7 @@
         <tr><th scope="row">Click a step</th><td>Add or remove it. New steps use the New note length.</td></tr>
         <tr><th scope="row">Drag from an empty step</th><td>Draw one note as long as you drag. It snaps to the grid, or hold <kbd>Alt</kbd> for single ticks.</td></tr>
         <tr><th scope="row"><kbd>Cmd</kbd>-drag across steps</th><td>Fill separate steps. Dragging from a filled step removes steps instead.</td></tr>
-        <tr><th scope="row">Drag the end of a step's bar</th><td>Set where the note ends. It snaps to the grid, or hold <kbd>Alt</kbd> for single ticks. Useful for cutting a loop at an exact point when the pad is set to Note On.</td></tr>
+        <tr><th scope="row">Drag a note</th><td>Set where it ends, from anywhere on its first step or its end marker. A click that doesn't drag removes it. It snaps to the grid, or hold <kbd>Alt</kbd> for single ticks. Useful for cutting a loop at an exact point when the pad is set to Note On.</td></tr>
         <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
         <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
@@ -235,7 +235,7 @@
     <h3>Reading the grid</h3>
     <ul>
       <li><b>Brighter steps</b> are louder.</li>
-      <li><b>The solid bar</b> shows how long a note lasts, and can run across several steps. Drag its end to change it.</li>
+      <li><b>The solid bar</b> shows how long a note lasts, and can run across several steps. Drag the note to change it.</li>
       <li><b>Bars inside a step</b> show its separate hits, and these can't be dragged.</li>
       <li><b>A white dot</b> means the note starts later than the beginning of the step.</li>
       <li><b>A dashed outline</b> means less than 100% probability. It works during live playback here, but it hasn't been confirmed on the MPC after saving.</li>

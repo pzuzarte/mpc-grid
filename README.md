@@ -48,7 +48,7 @@ The MPC only makes sound if the loaded project has samples on the pads you use.
   the step. Alt-click an existing step to apply the current setting to it. These
   are saved as ordinary notes, so the MPC plays and shows them as separate hits.
 - Each note's length is drawn as a bar. Drag from an empty step to draw a note of
-  any length, or drag the end of a bar to change it. This is useful for cutting
+  any length, or drag a note to change it, while a click removes it. This is useful for cutting
   loops at an exact point when the pad is set to Note On. It snaps to the grid, or
   hold Alt for single ticks. Clicking adds a step at the New note length, and
   Cmd-drag fills separate steps.

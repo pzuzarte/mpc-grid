@@ -15,6 +15,7 @@ const BLANK_TRACK = "Pads";
 const CC_VOLUME = 7;
 const CC_PAN = 10;
 const PAN_CENTRE = 64;
+const DRAG_THRESHOLD_PX = 4; // A press that moves less than this counts as a click.
 const MIN_CELL_PX = 14; // Below this, steps are too small to click reliably.
 const DENSE_CELL_PX = 22;
 const LAST_PROJECT_KEY = "mpc-grid-last-project";
@@ -711,6 +712,12 @@ function moveLengthDrag(event) {
     if (event.clientX <= box.right) return;
     state.lengthDrag.moved = true;
   }
+  if (state.lengthDrag.pressed && !state.lengthDrag.moved) {
+    if (Math.abs(event.clientX - state.lengthDrag.startX) < DRAG_THRESHOLD_PX) return;
+    state.lengthDrag.moved = true;
+  }
+  // Repeats have a fixed spacing, so they don't resize.
+  if (!note) return;
   const gap = parseFloat(getComputedStyle($("grid")).getPropertyValue("--grid-gap")) || 0;
   const perStep = box.width + gap;
   const pointer = anchorTime + ((event.clientX - box.left) / perStep) * state.resolution;
@@ -731,7 +738,9 @@ function moveLengthDrag(event) {
 }
 
 function endLengthDrag() {
+  const drag = state.lengthDrag;
   state.lengthDrag = null;
+  if (drag.pressed && !drag.moved) setCell(drag.cell, false);
   markDirty();
 }
 
@@ -1111,6 +1120,18 @@ function bindGridEvents() {
     }
     remember();
     const on = !cell.classList.contains("on");
+    // Dragging a note resizes it, so it's only removed by a click that doesn't move.
+    if (!on && !event.metaKey) {
+      const hits = notesInCell(Number(cell.dataset.note), Number(cell.dataset.time));
+      state.lengthDrag = {
+        note: hits.length === 1 ? hits[0] : null,
+        anchorTime: Number(cell.dataset.time),
+        cell,
+        pressed: true,
+        startX: event.clientX,
+      };
+      return;
+    }
     setCell(cell, on);
     markDirty();
     if (on) audition(Number(cell.dataset.note));
