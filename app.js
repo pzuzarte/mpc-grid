@@ -16,6 +16,8 @@ const CC_VOLUME = 7;
 const CC_PAN = 10;
 const PAN_CENTRE = 64;
 const DRAG_THRESHOLD_PX = 4; // A press that moves less than this counts as a click.
+const FINE_DIVISIONS = 8; // Resizing moves in eighths of a step, or quarters when steps are narrow.
+const NARROW_STEP_PX = 32;
 const MIN_CELL_PX = 14; // Below this, steps are too small to click reliably.
 const DENSE_CELL_PX = 22;
 const LAST_PROJECT_KEY = "mpc-grid-last-project";
@@ -700,8 +702,27 @@ function startLengthDrag(event, handle) {
     && n.time < anchorTime + state.resolution && n.time + n.length > anchorTime);
   if (!found) return;
   remember();
-  state.lengthDrag = { note: found, anchorTime, cell };
+  state.lengthDrag = { note: found, anchorTime, cell, pressed: true, startX: event.clientX };
   event.preventDefault();
+}
+
+// Where a resize ends. Drawing a new note uses whole steps, while resizing is finer so
+// a note can end inside a step. Alt gives single ticks.
+function dragEnd(event, drag, start, currentLength, box) {
+  const gap = parseFloat(getComputedStyle($("grid")).getPropertyValue("--grid-gap")) || 0;
+  const ticksAt = (x) => drag.anchorTime + ((x - box.left) / (box.width + gap)) * state.resolution;
+  // Follows the mouse from where the note was grabbed, so it doesn't jump at the start.
+  if (!drag.drawing && drag.grabOffset === undefined) {
+    drag.grabOffset = start + currentLength - ticksAt(drag.startX);
+  }
+  const pointer = ticksAt(event.clientX) + (drag.grabOffset || 0);
+  if (event.altKey) return { end: Math.round(pointer), shortest: start + 1 };
+  const divisions = box.width < NARROW_STEP_PX ? FINE_DIVISIONS / 2 : FINE_DIVISIONS;
+  const unit = drag.drawing ? state.resolution : state.resolution / divisions;
+  return {
+    end: Math.round(pointer / unit) * unit,
+    shortest: Math.floor(start / unit) * unit + unit,
+  };
 }
 
 function moveLengthDrag(event) {
@@ -718,17 +739,9 @@ function moveLengthDrag(event) {
   }
   // Repeats have a fixed spacing, so they don't resize.
   if (!note) return;
-  const gap = parseFloat(getComputedStyle($("grid")).getPropertyValue("--grid-gap")) || 0;
-  const perStep = box.width + gap;
-  const pointer = anchorTime + ((event.clientX - box.left) / perStep) * state.resolution;
   const windowEnd = state.windowStart + state.windowSpan;
-  // Snaps to steps, so a cut lands exactly on the grid. Alt gives single ticks.
-  let end = event.altKey
-    ? Math.round(pointer)
-    : Math.round(pointer / state.resolution) * state.resolution;
-  const shortest = event.altKey ? note.time + 1
-    : Math.floor(note.time / state.resolution) * state.resolution + state.resolution;
-  end = Math.max(shortest, Math.min(end, windowEnd, sequence().lengthPulses));
+  const target = dragEnd(event, state.lengthDrag, note.time, note.length, box);
+  const end = Math.max(target.shortest, Math.min(target.end, windowEnd, sequence().lengthPulses));
   const length = end - note.time;
   if (length !== note.length) {
     note.length = length;
