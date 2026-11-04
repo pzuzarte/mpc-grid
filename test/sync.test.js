@@ -1,0 +1,85 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { afterEach, test } = require("node:test");
+const Sync = require("../sync.js");
+
+// An open channel keeps the test process running, even after a failure.
+const opened = [];
+afterEach(() => { opened.splice(0).forEach((link) => link.close()); });
+
+const page = (name, { checked = true, playing = true } = {}) => {
+  const calls = { start: [], stop: 0, tempo: [], status: [] };
+  const checkbox = { checked, addEventListener() {} };
+  const link = Sync.connect({
+    name,
+    checkbox,
+    storageKey: name,
+    start: (info) => { calls.start.push(info); return playing; },
+    stop: () => { calls.stop += 1; },
+    tempo: (info) => { calls.tempo.push(info); },
+    status: (message, isError) => { calls.status.push([message, Boolean(isError)]); },
+  });
+  opened.push(link);
+  checkbox.checked = checked;
+  return { calls, checkbox, link };
+};
+const delivered = () => new Promise((resolve) => { setTimeout(resolve, 30); });
+
+test("pressing play starts the other page at the same moment and tempo", async () => {
+  const a = page("A");
+  const b = page("B");
+  const at = a.link.announcePlay(97.5);
+  await delivered();
+  assert.equal(b.calls.start.length, 1);
+  assert.equal(b.calls.start[0].bpm, 97.5);
+  assert.ok(Math.abs(b.calls.start[0].at - at) < 5);
+  assert.equal(a.calls.start.length, 0);
+  assert.deepEqual(a.calls.status, [["Playing with B.", false]]);
+});
+
+test("stop and tempo reach the other page", async () => {
+  const a = page("A");
+  const b = page("B");
+  a.link.announceStop();
+  a.link.announceTempo({ bpm: 140, nextTime: performance.now() + 50, nextPulse: 480 });
+  await delivered();
+  assert.equal(b.calls.stop, 1);
+  assert.equal(b.calls.tempo[0].bpm, 140);
+  assert.equal(b.calls.tempo[0].pulse, 480);
+});
+
+test("a page with no MIDI output says so to the page that pressed play", async () => {
+  const a = page("A");
+  const b = page("B", { playing: false });
+  a.link.announcePlay(120);
+  await delivered();
+  assert.deepEqual(a.calls.status, [["B isn't playing, as it has no MIDI output.", true]]);
+});
+
+test("turning sync off stops sending and receiving", async () => {
+  const off = page("A");
+  const on = page("B");
+  off.checkbox.checked = false;
+  assert.equal(off.link.announcePlay(120), null);
+  on.link.announcePlay(120);
+  await delivered();
+  assert.equal(off.calls.start.length, 0);
+  assert.equal(on.calls.start.length, 0);
+});
+
+test("a nonsense tempo is ignored", async () => {
+  const a = page("A");
+  const b = page("B");
+  a.link.announcePlay(5000);
+  await delivered();
+  assert.equal(b.calls.start.length, 0);
+});
+
+test("alignment moves a page onto the other's beats by the shortest way", () => {
+  const timing = { pulsesPerBeat: 960, msPerPulse: 0.5, at: 1000, pulse: 0 };
+  assert.equal(Sync.aligned({ ...timing, nextPulse: 960, nextTime: 1480 }), 1480);
+  assert.equal(Sync.aligned({ ...timing, nextPulse: 960, nextTime: 1490 }), 1480);
+  // Half a pattern apart in pulses, but on the beat, so nothing needs to move.
+  assert.equal(Sync.aligned({ ...timing, nextPulse: 2880, nextTime: 1480 }), 1480);
+  assert.equal(Sync.aligned({ ...timing, nextPulse: 960, nextTime: 1460 }), 1480);
+});

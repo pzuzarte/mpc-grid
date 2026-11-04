@@ -1294,14 +1294,42 @@ function schedule() {
 
 const sendingClock = () => $("clock").checked || state.sendOnce;
 
-function play() {
+// Plays together with the other grid when both are open. See sync.js.
+const link = Sync.connect({
+  name: "MPC Grid",
+  checkbox: $("sync"),
+  storageKey: "mpc-grid-sync",
+  start({ bpm, at }) {
+    if (state.sendOnce) return false;
+    if (state.playing) stop({ fromLink: true });
+    $("bpm").value = bpm;
+    play({ startAt: at, fromLink: true });
+    return state.playing;
+  },
+  stop: () => stop({ fromLink: true }),
+  tempo({ bpm, at, pulse }) {
+    $("bpm").value = bpm;
+    if (!state.playing || !Number.isFinite(pulse)) return;
+    state.nextTime = Sync.aligned({
+      nextTime: state.nextTime, nextPulse: state.nextPulse, at, pulse, msPerPulse: msPerPulse(), pulsesPerBeat: PPQ,
+    });
+  },
+  status: (message, isError) => setStatus(message, isError),
+});
+
+const announceTempo = () => link.announceTempo({
+  bpm: currentBpm(), nextTime: state.nextTime, nextPulse: state.playing ? state.nextPulse : 0,
+});
+
+function play({ startAt = null, fromLink = false } = {}) {
   if (!state.output) {
     setStatus("No MIDI output connected. Exit SD Card Access mode on the MPC.", true);
     return;
   }
   state.playing = true;
   state.nextPulse = 0;
-  state.nextTime = performance.now() + 60;
+  const shared = fromLink || state.sendOnce ? null : link.announcePlay(currentBpm());
+  state.nextTime = startAt ?? shared ?? performance.now() + 60;
   if (sendingClock()) state.output.send([0xFA], state.nextTime);
   $("play").textContent = "Stop";
   $("playhead").hidden = false;
@@ -1333,9 +1361,10 @@ function finishSendOnce() {
   setStatus("Sent one pass. If the MPC was recording, press STOP on it and play it back.");
 }
 
-function stop() {
+function stop({ fromLink = false } = {}) {
   state.queuedKey = null;
   if (!state.playing) return;
+  if (!fromLink && !state.sendOnce) link.announceStop();
   if (sendingClock() && state.output) state.output.send([0xFC]);
   state.playing = false;
   state.sendOnce = false;
@@ -1421,6 +1450,7 @@ function bindControls() {
     state.channel = Number(event.target.value) - 1;
   });
   $("play").addEventListener("click", () => (state.playing ? stop() : play()));
+  $("bpm").addEventListener("change", announceTempo);
   $("send").addEventListener("click", sendToMpc);
   $("undo").addEventListener("click", undo);
   $("duplicate").addEventListener("click", duplicateSequence);

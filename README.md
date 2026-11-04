@@ -63,6 +63,12 @@ The MPC only makes sound if the loaded project has samples on the pads you use.
   shows fewer bars at a time with arrows to move between them, and follows the
   playhead during playback.
 
+## Playing with S-1 Grid
+
+With [S-1 Grid](https://pzuzarte.github.io/s1-grid/) open in the same browser, Play,
+Stop and tempo on either page control both. Untick Sync on either page to play them
+separately.
+
 ## Working with projects
 
 The MPC can't use MIDI and share its card at the same time:
