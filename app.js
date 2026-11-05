@@ -1294,6 +1294,14 @@ function schedule() {
 
 const sendingClock = () => $("clock").checked || state.sendOnce;
 
+function renderPeers(names) {
+  const pill = $("sync-peers");
+  pill.hidden = !$("sync").checked;
+  pill.textContent = names.length ? `Linked: ${names.join(", ")}` : "Not linked";
+  pill.className = `pill ${names.length ? "ok" : ""}`;
+  pill.title = names.length ? "Play, stop and tempo are shared with this page." : "The other grid isn't open in this browser, or has Sync off.";
+}
+
 // Plays together with the other grid when both are open. See sync.js.
 const link = Sync.connect({
   name: "MPC Grid",
@@ -1315,7 +1323,9 @@ const link = Sync.connect({
     });
   },
   status: (message, isError) => setStatus(message, isError),
+  peers: renderPeers,
 });
+renderPeers([]);
 
 const announceTempo = () => link.announceTempo({
   bpm: currentBpm(), nextTime: state.nextTime, nextPulse: state.playing ? state.nextPulse : 0,

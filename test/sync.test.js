@@ -73,6 +73,24 @@ test("turning sync off stops sending and receiving", async () => {
   assert.equal(on.calls.start.length, 0);
 });
 
+test("each page can tell which others are open", async () => {
+  const names = [];
+  const checkbox = { checked: true, addEventListener() {} };
+  const link = Sync.connect({
+    name: "A", checkbox, storageKey: "A", start() {}, stop() {}, tempo() {}, status() {}, peers: (list) => names.push(list),
+  });
+  opened.push(link);
+  const other = page("B");
+  await until(() => names.length);
+  assert.deepEqual(names.at(-1), ["B"]);
+  other.link.close();
+  const b2 = new BroadcastChannel("grid-sync");
+  b2.postMessage({ type: "bye", from: "B" });
+  await until(() => names.at(-1).length === 0);
+  b2.close();
+  assert.deepEqual(names.at(-1), []);
+});
+
 test("a nonsense tempo is ignored", async () => {
   const a = page("A");
   const b = page("B");

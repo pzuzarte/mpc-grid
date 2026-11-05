@@ -87,6 +87,7 @@
   <label class="check" title="Plays together with the other grid when both are open in this browser. Play, stop and tempo are shared.">
     <input id="sync" type="checkbox"> Sync
   </label>
+  <span id="sync-peers" class="pill" role="status" hidden></span>
   <div class="spacer"></div>
   <button id="undo" type="button" disabled>Undo</button>
   <button id="duplicate" type="button" title="Copy this pattern to the next empty sequence">Duplicate</button>
@@ -229,7 +230,7 @@
         <tr><th scope="row">New note length</th><td>How long new steps last. Choose a longer value for loops, so they aren't cut off in Note On mode.</td></tr>
         <tr><th scope="row">Note repeat</th><td>New steps play 2-8 evenly spaced hits, drawn as bars in the step. They're saved as separate notes.</td></tr>
         <tr><th scope="row">MIDI output and Channel</th><td>Where notes are sent. The MPC is chosen automatically when it's found.</td></tr>
-        <tr><th scope="row">Sync</th><td>Plays this page together with <a href="https://pzuzarte.github.io/s1-grid/" target="_blank" rel="noopener">S-1 Grid</a> when both are open in the same browser, each with its MIDI connected. Pressing Play or Stop on either one starts or stops both, from the start of their patterns, at the tempo of the page you pressed. Changing the BPM on either changes both. Patterns of different lengths each loop in their own time. Untick it on either page to play them separately.</td></tr>
+        <tr><th scope="row">Sync</th><td>Plays this page together with <a href="https://pzuzarte.github.io/s1-grid/" target="_blank" rel="noopener">S-1 Grid</a> when both are open in the same browser, each with its MIDI connected. Pressing Play or Stop on either one starts or stops both, from the start of their patterns, at the tempo of the page you pressed. Changing the BPM on either changes both. Patterns of different lengths each loop in their own time. Untick it on either page to play them separately. The badge beside it shows whether the other page is connected.</td></tr>
         <tr><th scope="row">Send clock</th><td>Sends MIDI start, stop and clock with playback. Set MIDI Sync In to MIDI Clock on the MPC to follow it.</td></tr>
         <tr><th scope="row">Undo, Duplicate, Clear</th><td>Undo an edit, copy the pattern to the next empty slot, or remove all of its notes.</td></tr>
         <tr><th scope="row">Pad banks</th><td>Banks A-H hold 16 pads each. A dot means the bank has notes in this pattern. "In use" shows pads with samples or notes from any bank.</td></tr>

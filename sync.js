@@ -6,6 +6,8 @@
 const Sync = (() => {
   const CHANNEL = "grid-sync";
   const START_DELAY_MS = 120; // Time for the message to arrive before the first note.
+  const HEARTBEAT_MS = 3000;
+  const GONE_AFTER_MS = 8000;
 
   const validBpm = (bpm) => Number.isFinite(bpm) && bpm >= 20 && bpm <= 300;
   const toLocal = (wall) => performance.now() + wall - Date.now();
@@ -19,26 +21,66 @@ const Sync = (() => {
     return nextTime - (error - Math.round(error / beat) * beat);
   }
 
-  function connect({ name, checkbox, storageKey, start, stop, tempo, status }) {
+  // A worker's timer keeps running in a background tab, where a page's own slows down.
+  function everyHeartbeat(callback) {
+    if (typeof Worker === "undefined") {
+      const timer = setInterval(callback, HEARTBEAT_MS);
+      timer.unref?.();
+      return () => clearInterval(timer);
+    }
+    const worker = new Worker(URL.createObjectURL(new Blob(
+      [`setInterval(() => postMessage(0), ${HEARTBEAT_MS});`], { type: "text/javascript" })));
+    worker.onmessage = callback;
+    return () => worker.terminate();
+  }
+
+  function connect({ name, checkbox, storageKey, start, stop, tempo, status, peers = () => {} }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
     try {
       checkbox.checked = localStorage.getItem(storageKey) !== "off";
     } catch {
       checkbox.checked = true;
     }
+    const active = () => channel && checkbox.checked;
+    const post = (message) => channel.postMessage({ ...message, from: name });
+
+    // Which other pages are open, and when each was last heard from.
+    const seen = new Map();
+    const report = () => peers([...seen.keys()].sort());
+    const sweep = () => {
+      const oldest = Date.now() - GONE_AFTER_MS;
+      let changed = false;
+      for (const [peer, time] of seen) {
+        if (time < oldest) changed = seen.delete(peer) || changed;
+      }
+      if (changed) report();
+    };
+
     checkbox.addEventListener("change", () => {
       try {
         localStorage.setItem(storageKey, checkbox.checked ? "on" : "off");
       } catch {
         // It still works for this visit.
       }
+      if (!channel) return;
+      post({ type: checkbox.checked ? "hello" : "bye" });
+      if (!checkbox.checked) seen.clear();
+      report();
     });
-    const active = () => channel && checkbox.checked;
-    const post = (message) => channel.postMessage({ ...message, from: name });
 
+    let stopHeartbeat = () => {};
+    let leave = null;
     if (channel) {
       channel.onmessage = ({ data }) => {
         if (!active() || !data || data.from === name) return;
+        if (data.type === "bye") {
+          if (seen.delete(data.from)) report();
+          return;
+        }
+        const isNew = !seen.has(data.from);
+        seen.set(data.from, Date.now());
+        if (isNew) report();
+        if (data.type === "hello") post({ type: "here" });
         if (data.type === "play" && validBpm(data.bpm) && Number.isFinite(data.at)) {
           const playing = start({ bpm: data.bpm, at: toLocal(data.at) });
           if (playing) status(`Playing with ${data.from} at ${data.bpm} BPM.`);
@@ -53,6 +95,15 @@ const Sync = (() => {
           status(`${data.from} isn't playing, as it has no MIDI output.`, true);
         }
       };
+      stopHeartbeat = everyHeartbeat(() => {
+        if (active()) post({ type: "here" });
+        sweep();
+      });
+      if (typeof addEventListener === "function") {
+        leave = () => { if (active()) post({ type: "bye" }); };
+        addEventListener("pagehide", leave);
+      }
+      if (active()) post({ type: "hello" });
     }
 
     return {
@@ -70,6 +121,8 @@ const Sync = (() => {
         if (active()) post({ type: "tempo", bpm, at: toWall(nextTime), pulse: nextPulse });
       },
       close() {
+        stopHeartbeat();
+        if (leave) removeEventListener("pagehide", leave);
         if (channel) channel.close();
       },
     };
