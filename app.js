@@ -1493,11 +1493,18 @@ function bindControls() {
       closeNoteEditor();
       return;
     }
-    if (typing(event.target) || event.target.closest?.("#note-editor")) return;
-    if (event.code === "Space") {
+    // Space is the transport wherever you've last clicked, unless you're writing text.
+    const writing = event.target.tagName === "TEXTAREA" || /^(text|search)$/.test(event.target.type);
+    if (event.code === "Space" && !writing && !event.metaKey && !event.ctrlKey && !event.altKey
+      && !event.target.closest?.("#note-editor") && !document.querySelector("dialog[open]")) {
       event.preventDefault();
-      if (state.playing) stop(); else play();
-    } else if ((event.metaKey || event.ctrlKey) && event.key === "z") {
+      if (!event.repeat) {
+        if (state.playing) stop(); else play();
+      }
+      return;
+    }
+    if (typing(event.target) || event.target.closest?.("#note-editor")) return;
+    if ((event.metaKey || event.ctrlKey) && event.key === "z") {
       event.preventDefault();
       undo();
     } else if (/^[1-8]$/.test(event.key) && !event.metaKey && !event.ctrlKey) {
