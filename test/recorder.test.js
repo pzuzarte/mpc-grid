@@ -65,7 +65,8 @@ test("notes land on the nearest step, wrapping round the loop", () => {
   assert.equal(Recorder.nearestStep(250, STEP, LENGTH), STEP);
   assert.equal(Recorder.nearestStep(LENGTH - 20, STEP, LENGTH), 0);
   assert.equal(Recorder.heldLength(LENGTH - STEP, STEP, LENGTH - STEP, STEP, LENGTH), STEP, "cut at the pattern's end");
-  assert.equal(Recorder.heldLength(0, 700, 0, STEP, LENGTH), 3 * STEP);
+  assert.equal(Recorder.heldLength(0, 700, 0, STEP, LENGTH), 700, "as held, not rounded to steps");
+  assert.equal(Recorder.heldLength(100, 105, 0, STEP, LENGTH), STEP / 8, "a quick tap");
 });
 
 test("each pass of the loop adds to the take, and held notes keep their length", () => {
@@ -79,7 +80,7 @@ test("each pass of the loop adds to the take, and held notes keep their length",
   clock.pulse = 4 * STEP; // Next time round, a different step.
   send("Keystep", [0x90, 64, 127]);
   send("Keystep", [0x90, 64, 0]);
-  assert.deepEqual(notes.map((n) => [n.time, n.note, n.length]), [[0, 60, 2 * STEP], [4 * STEP, 64, STEP]]);
+  assert.deepEqual(notes.map((n) => [n.time, n.note, n.length]), [[0, 60, 2 * STEP - 5], [4 * STEP, 64, STEP / 8]]);
   assert.equal(notes[1].velocity, 1);
   assert.equal(notes[0].probability, 100);
   recorder.toggle();

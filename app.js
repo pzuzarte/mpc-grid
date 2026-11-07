@@ -1253,6 +1253,7 @@ function refreshOutputs() {
 /* ---------- Recording ---------- */
 
 let recorder = null;
+let click = null;
 
 function pulseAt(time) {
   const length = sequence().lengthPulses;
@@ -1277,6 +1278,7 @@ function showRecorded(item) {
 }
 
 function setUpRecorder() {
+  click = Recorder.createClick({ storageKey: "mpc-grid-click", button: $("click") });
   recorder = Recorder.create({
     notes: trackNotes,
     makeNote: (fields) => fields,
@@ -1355,6 +1357,7 @@ function schedule() {
     if (sendingClock() && from % CLOCK_PULSES === 0 && state.output) {
       state.output.send([0xF8], state.nextTime);
     }
+    if (from % PPQ === 0 && !state.sendOnce) click.at(state.nextTime, from % (4 * PPQ) === 0);
     for (const note of notesOf(seq)) {
       if (note.time >= from && note.time < to && !state.muted.has(note.note)
           && Math.random() * 100 < (note.probability ?? 100)) {

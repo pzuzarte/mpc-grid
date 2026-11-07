@@ -1,7 +1,7 @@
 "use strict";
 /* Records notes into the grid from any MIDI input, on every channel or just one. While the
-   pattern plays, notes land on the nearest step and last as long as they're held, and each
-   pass round the loop adds to the last. While stopped, each key adds a note and moves on a
+   pattern plays, notes land on the nearest step and last exactly as long as they're held, and each
+   pass round the loop adds to the last. A click can be played on each beat. While stopped, each key adds a note and moves on a
    step. Notes from another keyboard are passed on to the instrument while recording, so you
    hear what you play. The same file is used by S-1 Grid, Protein Grid, Bass Station Grid and
    MPC Grid. */
@@ -25,10 +25,11 @@ const Recorder = (() => {
     return wrap(Math.round(pulse / resolution) * resolution, length);
   }
 
-  // How long a key was held, in whole steps, ending at the pattern's end at the latest.
+  // How long a key was held, as played rather than rounded to steps, ending at the
+  // pattern's end at the latest. A quick tap still gets an eighth of a step.
   function heldLength(fromPulse, toPulse, time, resolution, length) {
-    const held = wrap(toPulse - fromPulse, length);
-    return Math.min(Math.max(1, Math.round(held / resolution)) * resolution, length - time);
+    const held = Math.round(wrap(toPulse - fromPulse, length));
+    return Math.min(Math.max(Math.round(resolution / 8), held), length - time);
   }
 
   function readChoice(key) {
@@ -179,7 +180,63 @@ const Recorder = (() => {
     return recorder;
   }
 
-  return { ANY, accepts, create, heldLength, nearestStep };
+  /* A metronome click in the browser, on each beat while the pattern plays, louder on
+     the first beat of each bar. at() takes a performance.now() time, as MIDI sends do. */
+  function createClick({ storageKey, button }) {
+    const click = { on: false };
+    let audio = null;
+    try {
+      click.on = localStorage.getItem(storageKey) === "on";
+    } catch {
+      // It starts off.
+    }
+
+    function render() {
+      button.setAttribute("aria-pressed", String(click.on));
+    }
+
+    // Browsers only start sound after a click, so the audio is set up here.
+    function wake() {
+      if (!audio) {
+        const Context = window.AudioContext || window.webkitAudioContext;
+        if (!Context) return;
+        audio = new Context();
+      }
+      if (audio.state === "suspended") audio.resume();
+    }
+
+    click.at = (at, accent) => {
+      if (!click.on || !audio || audio.state !== "running") return;
+      const when = audio.currentTime + (at - performance.now()) / 1000;
+      if (when < audio.currentTime) return;
+      const tone = audio.createOscillator();
+      const level = audio.createGain();
+      tone.frequency.value = accent ? 1760 : 1320;
+      level.gain.setValueAtTime(accent ? 0.5 : 0.3, when);
+      level.gain.exponentialRampToValueAtTime(0.001, when + 0.04);
+      tone.connect(level).connect(audio.destination);
+      tone.start(when);
+      tone.stop(when + 0.05);
+    };
+
+    button.addEventListener("click", () => {
+      click.on = !click.on;
+      if (click.on) wake();
+      render();
+      try {
+        localStorage.setItem(storageKey, click.on ? "on" : "off");
+      } catch {
+        // It's just not remembered.
+      }
+    });
+    // A click left on from last time sounds once the page has been clicked anywhere.
+    document.addEventListener("pointerdown", () => { if (click.on) wake(); }, { once: true });
+    document.addEventListener("keydown", () => { if (click.on) wake(); }, { once: true });
+    render();
+    return click;
+  }
+
+  return { ANY, accepts, create, createClick, heldLength, nearestStep };
 })();
 
 if (typeof module !== "undefined") module.exports = Recorder;
