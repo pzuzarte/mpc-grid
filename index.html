@@ -75,6 +75,11 @@
       <button type="button" data-value="8">8x</button>
     </div>
   </div>
+  <div class="field" role="group" aria-label="Recording">
+    <button id="record" class="toggle" type="button" aria-pressed="false" title="Record notes into this sequence from the chosen input. Press Play to record in time as the pattern loops, or just press pads or keys to add them step by step.">Rec</button>
+    <select id="record-input" aria-label="Record from" title="The keyboard, pads or instrument to record from"></select>
+    <select id="record-channel" aria-label="Record channel" title="The MIDI channel to record, or any"></select>
+  </div>
   <label>MIDI output
     <select id="output"></select>
   </label>
@@ -205,6 +210,7 @@
         <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
         <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
+        <tr><th scope="row"><b>Rec</b></th><td>Records notes into this sequence from the input and channel beside it: the MPC's pads, another keyboard, or any input. While playing, hits land on the nearest step and each time round the loop adds more, then play back on the MPC like any other steps. While stopped, each hit adds a note and moves on a step. Undo takes back the whole take. Notes from another keyboard are passed on to the MPC while recording, so you hear them.</td></tr>
         <tr><th scope="row">Click a pad name</th><td>Hear that pad on the MPC</td></tr>
         <tr><th scope="row">Click <b>M</b> beside a pad</th><td>Mute it while playing, and click again to unmute. Its steps are kept, and saved projects aren't changed. Mutes last until you reload the page.</td></tr>
         <tr><th scope="row"><kbd>Space</kbd></th><td>Play and stop, unless you're typing in a text box such as a name</td></tr>
@@ -259,6 +265,7 @@
 <script src="xpj.js"></script>
 <script src="backend.js"></script>
 <script src="sync.js"></script>
+<script src="recorder.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

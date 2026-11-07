@@ -1245,11 +1245,69 @@ function refreshOutputs() {
     setMidiPill("MPC not found. Exit SD Card Access mode.", "warn");
     if (outputs[0]) $("output").value = "";
   }
+  // Every input is heard, for recording from any keyboard or the MPC's own pads.
+  for (const port of state.midi.inputs.values()) port.onmidimessage = (event) => recorder.message(event, port);
+  recorder.refresh(state.midi);
+}
+
+/* ---------- Recording ---------- */
+
+let recorder = null;
+
+function pulseAt(time) {
+  const length = sequence().lengthPulses;
+  const behind = (state.nextTime - time) / msPerPulse();
+  return ((state.nextPulse - behind) % length + length) % length;
+}
+
+function moveRecordCursor(time) {
+  const page = Math.floor(time / (state.pageBars * pulsesPerBar()));
+  if (page !== state.page) goToPage(page);
+}
+
+// A pad that isn't shown yet appears once it has notes, in the In use view.
+function showRecorded(item) {
+  if (!document.querySelector(`.cell[data-note="${item.note}"]`)) {
+    renderBanks();
+    renderGrid();
+  } else {
+    renderNotes();
+  }
+  markDirty();
+}
+
+function setUpRecorder() {
+  recorder = Recorder.create({
+    notes: trackNotes,
+    makeNote: (fields) => fields,
+    resolution: () => state.resolution,
+    length: () => sequence().lengthPulses,
+    playing: () => state.playing && !state.sendOnce,
+    pulseAt,
+    startStep: () => 0,
+    moveCursor: moveRecordCursor,
+    begin: () => {
+      closeNoteEditor({ restoreFocus: false });
+      remember();
+      renderChrome();
+    },
+    added: showRecorded,
+    lengthened: () => {
+      renderNoteBars();
+      markDirty();
+    },
+    status: setStatus,
+    thru: ([status, note, velocity]) => {
+      if (state.output) state.output.send([status | state.channel, note, velocity]);
+    },
+    isInstrument: (port) => /mpc/i.test(port.name),
+  }, { storageKey: "mpc-grid-record-input", button: $("record"), input: $("record-input"), channel: $("record-channel") });
 }
 
 function sendNote(note, velocity, atTime, lengthMs) {
   if (!state.output) return;
   const value = Math.max(1, Math.min(127, Math.round(velocity * 127)));
+  recorder.sent(note, atTime);
   try {
     state.output.send([0x90 | state.channel, note, value], atTime);
     state.output.send([0x80 | state.channel, note, 0], atTime + lengthMs);
@@ -1487,6 +1545,7 @@ function bindControls() {
   $("bpm").addEventListener("change", announceTempo);
   $("send").addEventListener("click", sendToMpc);
   $("undo").addEventListener("click", undo);
+  setUpRecorder();
   $("duplicate").addEventListener("click", duplicateSequence);
   $("clear").addEventListener("click", () => {
     if (!trackNotes().length) return;
