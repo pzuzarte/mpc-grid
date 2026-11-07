@@ -61,6 +61,7 @@ const state = {
   newLength: "step",
   barsQueued: false,
   lengthDrag: null,
+  muted: new Set(), // Notes that don't play. Only for this visit, and never saved to a project.
 };
 
 function blankView() {
@@ -471,7 +472,7 @@ function renderChannel() {
 function gridWidthForSteps() {
   const wrap = $("grid-wrap");
   const style = getComputedStyle(wrap);
-  const label = document.querySelector(".pad");
+  const label = document.querySelector(".pad-label");
   return wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
     - (label ? label.offsetWidth : 190);
 }
@@ -545,10 +546,14 @@ function renderGrid() {
   }
 
   for (const pad of pads) {
-    const label = document.createElement("button");
-    label.type = "button";
-    label.className = "pad";
-    label.title = `Note ${pad.note}. Click to hear it.`;
+    const muted = state.muted.has(pad.note);
+    const label = document.createElement("div");
+    label.className = "pad-label";
+    label.classList.toggle("muted", muted);
+    const hear = document.createElement("button");
+    hear.type = "button";
+    hear.className = "pad";
+    hear.title = `Note ${pad.note}. Click to hear it.`;
     const id = document.createElement("span");
     id.className = "id";
     id.textContent = padId(pad.pad);
@@ -556,8 +561,17 @@ function renderGrid() {
     name.className = "name";
     // Without a project file there is no way to know what is on the pad.
     name.textContent = pad.sample || (isBlank() ? `Note ${pad.note}` : "(no sample)");
-    label.append(id, name);
-    label.addEventListener("pointerdown", () => audition(pad.note));
+    hear.append(id, name);
+    hear.addEventListener("pointerdown", () => audition(pad.note));
+    const mute = document.createElement("button");
+    mute.type = "button";
+    mute.className = "mute";
+    mute.textContent = "M";
+    mute.title = muted ? "Muted. Click to play this pad again." : "Mute this pad while playing";
+    mute.setAttribute("aria-label", `Mute pad ${padId(pad.pad)}`);
+    mute.setAttribute("aria-pressed", String(muted));
+    mute.addEventListener("click", () => toggleMute(pad));
+    label.append(hear, mute);
     nodes.push(label);
 
     for (let step = 0; step < stepCount; step += 1) {
@@ -565,6 +579,7 @@ function renderGrid() {
       const cell = document.createElement("button");
       cell.type = "button";
       cell.className = "cell";
+      cell.classList.toggle("muted", muted);
       cell.dataset.note = String(pad.note);
       cell.dataset.pad = padId(pad.pad);
       cell.dataset.time = String(time);
@@ -576,6 +591,15 @@ function renderGrid() {
   grid.replaceChildren(...nodes);
   renderNotes();
   renderStepControls();
+}
+
+// Muting goes by note, as that's what plays the pad on the MPC.
+function toggleMute(pad) {
+  if (state.muted.has(pad.note)) state.muted.delete(pad.note);
+  else state.muted.add(pad.note);
+  const muted = state.muted.has(pad.note);
+  renderGrid();
+  setStatus(muted ? `Pad ${padId(pad.pad)} muted. Its steps are kept but don't play.` : `Pad ${padId(pad.pad)} plays again.`);
 }
 
 function renderStepControls() {
@@ -1274,7 +1298,7 @@ function schedule() {
       state.output.send([0xF8], state.nextTime);
     }
     for (const note of notesOf(seq)) {
-      if (note.time >= from && note.time < to
+      if (note.time >= from && note.time < to && !state.muted.has(note.note)
           && Math.random() * 100 < (note.probability ?? 100)) {
         sendNote(note.note, note.velocity,
           state.nextTime + (note.time - from) * ms, note.length * ms);

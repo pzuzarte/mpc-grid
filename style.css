@@ -173,14 +173,21 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 
 .corner { position: sticky; top: 0; left: 0; z-index: 4; background: var(--bg); }
 
-.pad {
+.pad-label {
   position: sticky;
   left: 0;
   z-index: 3;
   display: flex;
+  gap: 2px;
+  min-height: 0;
+  background: var(--bg);
+}
+.pad {
+  display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 100%;
   min-height: 0;
   padding: 0 8px;
@@ -194,6 +201,21 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .pad .id { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 .pad .name { overflow: hidden; text-overflow: ellipsis; }
 .pad:active { background: var(--accent); }
+.mute {
+  flex: none;
+  width: 26px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: var(--panel);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.mute[aria-pressed="true"] { background: #e0a526; border-color: #e0a526; color: #1a1a1a; }
+.pad-label.muted .pad { opacity: 0.5; }
+.cell.muted { opacity: 0.35; }
 
 .cell {
   position: relative;
