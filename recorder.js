@@ -1,6 +1,6 @@
 "use strict";
 /* Records notes into the grid from any MIDI input, on every channel or just one. While the
-   pattern plays, notes land on the nearest step and last exactly as long as they're held, and each
+   pattern plays, notes land on the nearest step and last as long as they're held, or a set length, and each
    pass round the loop adds to the last. A click can be played on each beat. While stopped, each key adds a note and moves on a
    step. Notes from another keyboard are passed on to the instrument while recording, so you
    hear what you play. The same file is used by S-1 Grid, Protein Grid, Bass Station Grid and
@@ -45,6 +45,7 @@ const Recorder = (() => {
   /* api supplies the pattern and how to show changes:
      notes() the current pattern's notes, makeNote({time, note, velocity, length}),
      resolution(), length(), playing(), pulseAt(timeStamp), startStep(), moveCursor(time),
+     fixedLength(time) the length every recorded note gets, or null to keep how long it's held,
      begin() before a take, for Undo, added(item), lengthened(item), status(text, isError),
      thru(data) to pass a note to the instrument, and isInstrument(port), its own keys. */
   function create(api, { storageKey, button, input, channel }) {
@@ -119,14 +120,17 @@ const Recorder = (() => {
         time = step;
         last = at;
       }
+      const fixed = api.fixedLength(time);
       const notes = api.notes();
       const existing = notes.find((n) => n.note === note && n.time === time);
-      const item = existing || api.makeNote({ time, note, velocity: velocity / 127, length: api.resolution() });
+      const item = existing || api.makeNote({ time, note, velocity: velocity / 127, length: fixed ?? api.resolution() });
+      if (existing && fixed !== null) existing.length = fixed;
       if (!existing) {
         notes.push(item);
         notes.sort((a, b) => a.time - b.time || a.note - b.note);
       }
-      open.set(note, { item, pulse: api.playing() ? api.pulseAt(at) : null });
+      // A note given a set length keeps it, whenever the key is let go.
+      open.set(note, { item, pulse: api.playing() && fixed === null ? api.pulseAt(at) : null });
       api.added(item);
     }
 

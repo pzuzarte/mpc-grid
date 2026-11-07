@@ -55,9 +55,10 @@
     </div>
     <button id="triplets" class="toggle" type="button" aria-pressed="false" title="Three steps per beat division. Press T to switch.">Triplets</button>
   </div>
-  <label title="How long a clicked step lasts. Drag from an empty step to draw any length, or drag a note to change it.">New note length
+  <label title="How long a clicked or recorded note lasts. Off records each note as long as you hold the pad or key, and clicked steps last one step. Drag from an empty step to draw any length, or drag a note to change it.">New note length
     <select id="new-length">
-      <option value="step" selected>1 step</option>
+      <option value="off" selected>Off (as held)</option>
+      <option value="step">1 step</option>
       <option value="beat">1 beat</option>
       <option value="bar">1 bar</option>
       <option value="2bars">2 bars</option>
@@ -211,7 +212,7 @@
         <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
         <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
-        <tr><th scope="row"><b>Rec</b></th><td>Records notes into this sequence from the input and channel beside it: the MPC's pads, another keyboard, or any input. While playing, hits land on the nearest step and last exactly as long as they're held, and each time round the loop adds more, then play back on the MPC like any other steps. While stopped, each hit adds a note and moves on a step. Undo takes back the whole take. Notes from another keyboard are passed on to the MPC while recording, so you hear them.</td></tr>
+        <tr><th scope="row"><b>Rec</b></th><td>Records notes into this sequence from the input and channel beside it: the MPC's pads, another keyboard, or any input. While playing, hits land on the nearest step and last as long as they're held, or the New note length if it isn't Off, and each time round the loop adds more, then play back on the MPC like any other steps. While stopped, each hit adds a note and moves on a step. Undo takes back the whole take. Notes from another keyboard are passed on to the MPC while recording, so you hear them.</td></tr>
         <tr><th scope="row"><b>Click</b></th><td>A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It comes from this computer's speakers, not the MPC, and stays on or off for next time.</td></tr>
         <tr><th scope="row">Click a pad name</th><td>Hear that pad on the MPC</td></tr>
         <tr><th scope="row">Click <b>M</b> beside a pad</th><td>Mute it while playing, and click again to unmute. Its steps are kept, and saved projects aren't changed. Mutes last until you reload the page.</td></tr>
@@ -236,7 +237,7 @@
         <tr><th scope="row">Live volume and Live pan</th><td>Move the whole track's volume or pan on the MPC right away, even while it plays. They affect every pad and aren't saved to the project. Double-click Live pan to centre it. Reload the project on the MPC to undo them.</td></tr>
         <tr><th scope="row">Bars</th><td>Length of the current pattern. Shortening it removes notes past the new end, and Undo brings them back.</td></tr>
         <tr><th scope="row">Steps and Triplets</th><td>Grid size: 1/8, 1/16 or 1/32. Triplets puts three steps where there were two.</td></tr>
-        <tr><th scope="row">New note length</th><td>How long new steps last. Choose a longer value for loops, so they aren't cut off in Note On mode.</td></tr>
+        <tr><th scope="row">New note length</th><td>How long new steps last. Off records notes as long as they're held, and clicked steps last one step. Choose a longer value for loops, so they aren't cut off in Note On mode.</td></tr>
         <tr><th scope="row">Note repeat</th><td>New steps play 2-8 evenly spaced hits, drawn as bars in the step. They're saved as separate notes.</td></tr>
         <tr><th scope="row">MIDI output and Channel</th><td>Where notes are sent. The MPC is chosen automatically when it's found.</td></tr>
         <tr><th scope="row">Sync</th><td>Plays this page together with <a href="https://pzuzarte.github.io/s1-grid/" target="_blank" rel="noopener">S-1 Grid</a> when both are open in the same browser, each with its MIDI connected. Pressing Play or Stop on either one starts or stops both, from the start of their patterns, at the tempo of the page you pressed. Changing the BPM on either changes both. Patterns of different lengths each loop in their own time. Untick it on either page to play them separately. The badge beside it shows whether the other page is connected.</td></tr>

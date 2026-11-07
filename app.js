@@ -58,7 +58,7 @@ const state = {
   syncing: false,
   projectsSignature: "",
   sendOnce: false,
-  newLength: "step",
+  newLength: "off",
   barsQueued: false,
   lengthDrag: null,
   muted: new Set(), // Notes that don't play. Only for this visit, and never saved to a project.
@@ -709,6 +709,7 @@ function describeLength(length) {
 function newNoteLength(time) {
   const seq = sequence();
   const lengths = {
+    off: state.resolution,
     step: state.resolution,
     beat: seq.beatLength,
     bar: pulsesPerBar(seq),
@@ -1282,6 +1283,8 @@ function setUpRecorder() {
   recorder = Recorder.create({
     notes: trackNotes,
     makeNote: (fields) => fields,
+    // Off keeps each note as long as it was held.
+    fixedLength: (time) => (state.newLength === "off" ? null : newNoteLength(time)),
     resolution: () => state.resolution,
     length: () => sequence().lengthPulses,
     playing: () => state.playing && !state.sendOnce,

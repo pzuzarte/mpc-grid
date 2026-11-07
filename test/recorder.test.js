@@ -27,7 +27,7 @@ global.Option = function Option(text, value) {
 const stored = new Map();
 global.localStorage = { getItem: (key) => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) };
 
-function setUp({ playing = true } = {}) {
+function setUp({ playing = true, fixed = null } = {}) {
   const notes = [];
   const passed = [];
   const clock = { pulse: 0, playing };
@@ -36,6 +36,7 @@ function setUp({ playing = true } = {}) {
     notes: () => notes,
     makeNote: (fields) => ({ ...fields, probability: 100 }),
     resolution: () => STEP,
+    fixedLength: () => fixed,
     length: () => LENGTH,
     playing: () => clock.playing,
     pulseAt: () => clock.pulse,
@@ -86,6 +87,15 @@ test("each pass of the loop adds to the take, and held notes keep their length",
   recorder.toggle();
   send("Keystep", [0x90, 67, 100]);
   assert.equal(notes.length, 2, "nothing is recorded once stopped");
+});
+
+test("a set length is kept however long the key is held", () => {
+  const { notes, clock, ui, send } = setUp({ fixed: 4 * STEP });
+  ui.button.fire("click");
+  send("Keystep", [0x90, 60, 100]);
+  clock.pulse = 30;
+  send("Keystep", [0x80, 60, 0]);
+  assert.equal(notes[0].length, 4 * STEP);
 });
 
 test("another keyboard is heard through the instrument, but the instrument's own keys aren't", () => {
