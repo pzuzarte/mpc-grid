@@ -145,3 +145,50 @@ test("a song sent before play reaches the other pages first", async () => {
   assert.deepEqual(order, ["song", "play"]);
   assert.deepEqual(parts[0], { bars: 4, loop: false, cues: [{ bar: 0, pattern: 3 }] });
 });
+
+// Plays a part bar by bar, returning the song bars heard, or "end" when it ends.
+function playBars(part, count) {
+  Sync.songStart(part);
+  const heard = [part.bar];
+  for (let i = 1; i < count; i += 1) {
+    if (!Sync.songNextBar(part)) {
+      heard.push("end");
+      break;
+    }
+    heard.push(part.bar);
+  }
+  return heard;
+}
+
+test("a song plays its bars in order, then ends or loops", () => {
+  assert.deepEqual(playBars({ bars: 3, loop: false }, 5), [0, 1, 2, "end"]);
+  assert.deepEqual(playBars({ bars: 3, loop: true }, 7), [0, 1, 2, 0, 1, 2, 0]);
+});
+
+test("a move jumps on the bar it names", () => {
+  const part = { bars: 12, loop: false };
+  Sync.songStart(part);
+  part.moves.push({ atBar: 2, toBar: 8 });
+  const heard = [part.bar];
+  for (let i = 0; i < 5; i += 1) { Sync.songNextBar(part); heard.push(part.bar); }
+  assert.deepEqual(heard, [0, 1, 8, 9, 10, 11]);
+});
+
+test("a held section repeats until it's let go", () => {
+  const part = { bars: 8, loop: false };
+  Sync.songStart(part);
+  // Bars 2 to 3 are held from the second bar, and let go on the eighth bar played.
+  part.moves.push({ atBar: 1, hold: { start: 2, end: 4 } }, { atBar: 7, hold: null });
+  const heard = [part.bar];
+  for (let i = 0; i < 10; i += 1) { Sync.songNextBar(part); heard.push(part.bar); }
+  assert.deepEqual(heard, [0, 1, 2, 3, 2, 3, 2, 3, 4, 5, 6]);
+});
+
+test("moves from Song Grid are checked against the song", () => {
+  assert.deepEqual(Sync.songMove({ atBar: 3, toBar: 4 }, 8), { atBar: 3, toBar: 4 });
+  assert.deepEqual(Sync.songMove({ atBar: 3, hold: null }, 8), { atBar: 3, hold: null });
+  assert.deepEqual(Sync.songMove({ atBar: 3, hold: { start: 0, end: 4 } }, 8), { atBar: 3, hold: { start: 0, end: 4 } });
+  assert.equal(Sync.songMove({ atBar: 3, toBar: 9 }, 8), null);
+  assert.equal(Sync.songMove({ atBar: 0, toBar: 1 }, 8), null);
+  assert.equal(Sync.songMove({ atBar: 3, hold: { start: 4, end: 2 } }, 8), null);
+});

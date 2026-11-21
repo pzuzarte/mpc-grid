@@ -28,6 +28,50 @@ const Sync = (() => {
 
   // The cue that starts at a bar, if one does.
   const songCue = (part, bar) => part.cues.find((cue) => cue.bar === bar);
+
+  /* While a song plays, Song Grid can move it: jump to another bar, or hold a stretch of
+     bars, such as a section, repeating it until it's let go. Each move names the bar it
+     happens on, counted from the start of playback however the song has moved, so every
+     page makes it at the same moment. A move is { atBar, toBar, hold }, where toBar and
+     hold are each left out when they don't change, and hold is { start, end } or null. */
+  function songMove(data, bars) {
+    if (!data || !Number.isInteger(data.atBar) || data.atBar < 1) return null;
+    const move = { atBar: data.atBar };
+    if (Number.isInteger(data.toBar) && data.toBar >= 0 && data.toBar < bars) move.toBar = data.toBar;
+    if (data.hold === null) move.hold = null;
+    else if (data.hold && Number.isInteger(data.hold.start) && Number.isInteger(data.hold.end)
+      && data.hold.start >= 0 && data.hold.end > data.hold.start && data.hold.end <= bars) {
+      move.hold = { start: data.hold.start, end: data.hold.end };
+    }
+    return "toBar" in move || "hold" in move ? move : null;
+  }
+
+  // The song bar that plays next. part also holds bar, the bar playing, played, how many
+  // bars have played since the start, hold and moves. Returns false once the song ends.
+  function songNextBar(part) {
+    part.played += 1;
+    let bar = part.bar + 1;
+    let jumped = false;
+    for (const move of part.moves.filter((item) => item.atBar === part.played)) {
+      if ("hold" in move) part.hold = move.hold;
+      if ("toBar" in move) {
+        bar = move.toBar;
+        jumped = true;
+      }
+    }
+    part.moves = part.moves.filter((item) => item.atBar > part.played);
+    // A held stretch repeats from its start when it's played through.
+    if (!jumped && part.hold && part.bar < part.hold.end && bar >= part.hold.end) bar = part.hold.start;
+    if (bar >= part.bars) {
+      if (!part.loop) return false;
+      bar = 0;
+    }
+    part.bar = bar;
+    return true;
+  }
+
+  // A part ready to play from its first bar.
+  const songStart = (part) => Object.assign(part, { bar: 0, played: 0, hold: null, moves: [] });
   const toLocal = (wall) => performance.now() + wall - Date.now();
   const toWall = (local) => Date.now() + local - performance.now();
 
@@ -52,7 +96,7 @@ const Sync = (() => {
     return () => worker.terminate();
   }
 
-  function connect({ name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {} }) {
+  function connect({ name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {}, songMoved = () => {} }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
     try {
       checkbox.checked = localStorage.getItem(storageKey) !== "off";
@@ -105,6 +149,8 @@ const Sync = (() => {
           post({ type: playing ? "joined" : "unable" });
         } else if (data.type === "song") {
           song(songPart(data.plan, name));
+        } else if (data.type === "song-move") {
+          songMoved(data.move);
         } else if (data.type === "stop") {
           stop();
         } else if (data.type === "tempo" && validBpm(data.bpm) && Number.isFinite(data.at)) {
@@ -138,6 +184,10 @@ const Sync = (() => {
         if (active()) post({ type: "stop" });
       },
       // Sent just before announcePlay, so each page has its part when it starts.
+      // Sent ahead of the bar it happens on. See songMove.
+      announceSongMove(move) {
+        if (active()) post({ type: "song-move", move });
+      },
       announceSong(plan) {
         if (active()) post({ type: "song", plan });
       },
@@ -152,7 +202,7 @@ const Sync = (() => {
     };
   }
 
-  return { aligned, connect, songCue, songPart };
+  return { aligned, connect, songCue, songMove, songNextBar, songPart, songStart };
 })();
 
 if (typeof module !== "undefined") module.exports = Sync;
