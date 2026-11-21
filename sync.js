@@ -1,8 +1,11 @@
 "use strict";
-/* Lets S-1 Grid and MPC Grid play together when both are open in one browser. They share
-   a website, so they can message each other directly, and each schedules its own notes
-   for the same moment. Date.now() is the shared clock, as performance.now() differs
-   between tabs. */
+/* Lets the grids play together when they're open in one browser. They share a website,
+   so they can message each other directly, and each schedules its own notes for the same
+   moment. Date.now() is the shared clock, as performance.now() differs between tabs.
+
+   Song Grid also sends each grid its part of a song just before it starts them: which
+   pattern each grid starts at which bar, or silence, and how many bars the song lasts.
+   Each grid follows it from its own clock. The same file is used by every grid. */
 const Sync = (() => {
   const CHANNEL = "grid-sync";
   const START_DELAY_MS = 120; // Time for the message to arrive before the first note.
@@ -10,6 +13,20 @@ const Sync = (() => {
   const GONE_AFTER_MS = 8000;
 
   const validBpm = (bpm) => Number.isFinite(bpm) && bpm >= 20 && bpm <= 300;
+
+  // One page's part of a song, checked, or null if there isn't one for it.
+  // Patterns are counted from 0, and null is silence.
+  function songPart(plan, name) {
+    if (!plan || typeof plan !== "object" || !Number.isInteger(plan.bars) || plan.bars < 1) return null;
+    const cues = plan.parts?.[name];
+    if (!Array.isArray(cues)) return null;
+    const valid = cues.filter((cue) => cue && Number.isInteger(cue.bar) && cue.bar >= 0 && cue.bar < plan.bars
+      && (cue.pattern === null || (Number.isInteger(cue.pattern) && cue.pattern >= 0 && cue.pattern < 16)));
+    return { bars: plan.bars, loop: Boolean(plan.loop), cues: valid.sort((a, b) => a.bar - b.bar) };
+  }
+
+  // The cue that starts at a bar, if one does.
+  const songCue = (part, bar) => part.cues.find((cue) => cue.bar === bar);
   const toLocal = (wall) => performance.now() + wall - Date.now();
   const toWall = (local) => Date.now() + local - performance.now();
 
@@ -34,7 +51,7 @@ const Sync = (() => {
     return () => worker.terminate();
   }
 
-  function connect({ name, checkbox, storageKey, start, stop, tempo, status, peers = () => {} }) {
+  function connect({ name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {} }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
     try {
       checkbox.checked = localStorage.getItem(storageKey) !== "off";
@@ -85,6 +102,8 @@ const Sync = (() => {
           const playing = start({ bpm: data.bpm, at: toLocal(data.at) });
           if (playing) status(`Playing with ${data.from} at ${data.bpm} BPM.`);
           post({ type: playing ? "joined" : "unable" });
+        } else if (data.type === "song") {
+          song(songPart(data.plan, name));
         } else if (data.type === "stop") {
           stop();
         } else if (data.type === "tempo" && validBpm(data.bpm) && Number.isFinite(data.at)) {
@@ -117,6 +136,10 @@ const Sync = (() => {
       announceStop() {
         if (active()) post({ type: "stop" });
       },
+      // Sent just before announcePlay, so each page has its part when it starts.
+      announceSong(plan) {
+        if (active()) post({ type: "song", plan });
+      },
       announceTempo({ bpm, nextTime, nextPulse }) {
         if (active()) post({ type: "tempo", bpm, at: toWall(nextTime), pulse: nextPulse });
       },
@@ -128,7 +151,7 @@ const Sync = (() => {
     };
   }
 
-  return { aligned, connect };
+  return { aligned, connect, songCue, songPart };
 })();
 
 if (typeof module !== "undefined") module.exports = Sync;

@@ -107,3 +107,38 @@ test("alignment moves a page onto the other's beats by the shortest way", () => 
   assert.equal(Sync.aligned({ ...timing, nextPulse: 2880, nextTime: 1480 }), 1480);
   assert.equal(Sync.aligned({ ...timing, nextPulse: 960, nextTime: 1460 }), 1480);
 });
+
+test("each page gets its own part of a song, checked", () => {
+  const plan = {
+    bars: 16,
+    loop: true,
+    parts: {
+      "S-1 Grid": [{ bar: 8, pattern: 2 }, { bar: 0, pattern: 0 }, { bar: 12, pattern: null }, { bar: 20, pattern: 1 }, { bar: 4, pattern: 99 }],
+    },
+  };
+  const part = Sync.songPart(plan, "S-1 Grid");
+  assert.deepEqual(part, { bars: 16, loop: true, cues: [{ bar: 0, pattern: 0 }, { bar: 8, pattern: 2 }, { bar: 12, pattern: null }] });
+  assert.equal(Sync.songPart(plan, "Protein Grid"), null);
+  assert.equal(Sync.songPart({ bars: 0, parts: {} }, "S-1 Grid"), null);
+  assert.equal(Sync.songPart(null, "S-1 Grid"), null);
+  assert.deepEqual(Sync.songCue(part, 8), { bar: 8, pattern: 2 });
+  assert.equal(Sync.songCue(part, 9), undefined);
+});
+
+test("a song sent before play reaches the other pages first", async () => {
+  const conductor = page("Song Grid");
+  const parts = [];
+  const order = [];
+  const checkbox = { checked: true, addEventListener() {} };
+  const grid = Sync.connect({
+    name: "S-1 Grid", checkbox, storageKey: "song-test",
+    start: () => { order.push("play"); return true; }, stop() {}, tempo() {}, status() {},
+    song: (part) => { order.push("song"); parts.push(part); },
+  });
+  opened.push(grid);
+  conductor.link.announceSong({ bars: 4, loop: false, parts: { "S-1 Grid": [{ bar: 0, pattern: 3 }] } });
+  conductor.link.announcePlay(120);
+  await until(() => order.length >= 2);
+  assert.deepEqual(order, ["song", "play"]);
+  assert.deepEqual(parts[0], { bars: 4, loop: false, cues: [{ bar: 0, pattern: 3 }] });
+});
