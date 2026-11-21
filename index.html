@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
 <link rel="stylesheet" href="style.css">
+<script>
+  // Set before the page draws, so it doesn't flash the other theme.
+  try { if (localStorage.getItem("mpc-grid-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
+</script>
 <!-- Counts visits anonymously. A fixed version with a checksum, and the tool works if it's blocked. -->
 <script data-goatcounter="https://pzuzarte.goatcounter.com/count"
         async src="https://gc.zgo.at/count.v5.js"
@@ -20,29 +24,55 @@
   <button id="card" type="button">Connect card</button>
   <span id="card-state" class="pill">Card: not connected</span>
   <div class="spacer"></div>
+  <label>MIDI output
+    <select id="output"></select>
+  </label>
+  <label>Channel
+    <select id="channel"></select>
+  </label>
   <span id="midi-state" class="pill">MIDI: starting</span>
+  <details class="tool-menu">
+    <summary title="Open another of the tools, in its own tab">Tools</summary>
+    <nav aria-label="Tools">
+      <a href="https://pzuzarte.github.io/s1-grid/" target="s1-grid">S-1 Grid</a>
+      <a href="https://pzuzarte.github.io/protein-grid/" target="protein-grid">Protein Grid</a>
+      <a href="https://pzuzarte.github.io/bass-station-grid/" target="bass-station-grid">Bass Station Grid</a>
+      <a href="https://pzuzarte.github.io/mpc-grid/" target="mpc-grid" aria-current="page">MPC Grid</a>
+      <a href="https://pzuzarte.github.io/td3-grid/" target="td3-grid">TD-3 Grid</a>
+      <a href="https://pzuzarte.github.io/song-grid/" target="song-grid">Song Grid</a>
+      <a href="https://pzuzarte.github.io/midi-hub/" target="midi-hub">MIDI Hub</a>
+      <hr>
+      <button id="theme-toggle" type="button" title="Switch between dark and light mode">Light mode</button>
+    </nav>
+  </details>
   <button id="help-open" type="button" title="Help (press ?)">Help</button>
 </header>
 
 <section class="bar slots-bar" aria-label="Sequences">
   <span class="group-label">Sequence</span>
   <div id="slots" class="slots"></div>
+  <div class="spacer"></div>
+  <button id="undo" type="button" title="Undo (Cmd+Z)" disabled>Undo</button>
+  <button id="redo" type="button" title="Redo (Cmd+Shift+Z)" disabled>Redo</button>
+  <button id="duplicate" type="button" title="Copy this pattern to the next empty sequence">Duplicate</button>
+  <button id="clear" type="button">Clear</button>
 </section>
 
 <section class="bar transport" aria-label="Transport and pattern settings">
   <button id="play" class="primary" type="button">Play</button>
-  <button id="send" type="button" title="Plays this pattern exactly once, with MIDI start, clock and stop, for the MPC to record">Send to MPC</button>
+  <button id="stop-all" type="button" title="Stops playback and silences any stuck notes">Panic</button>
   <label title="Sets playback speed from the laptop. It is not saved to the project.">Live BPM
     <input id="bpm" type="number" min="20" max="300" step="0.1" value="120">
   </label>
-  <div class="field" role="group" aria-label="Live track mix">
-    <label title="Moves the whole track's volume on the MPC right away. It isn't saved to the project.">Live volume
-      <input id="live-volume" class="live-slider" type="range" min="0" max="127" step="1">
-    </label>
-    <label title="Moves the whole track's pan on the MPC right away. It isn't saved to the project. Double-click to centre it.">Live pan
-      <input id="live-pan" class="live-slider" type="range" min="0" max="127" step="1">
-    </label>
-  </div>
+  <label class="check" title="Plays together with the other grids and Song Grid when they're open in this browser. Play, stop and tempo are shared.">
+    <input id="sync" type="checkbox"> Sync
+  </label>
+  <span id="sync-peers" class="pill" role="status" hidden></span>
+  <label class="check" title="Set MIDI Sync In to MIDI Clock on the MPC to follow the laptop.">
+    <input id="clock" type="checkbox"> Send clock
+  </label>
+  <button id="click" class="toggle" type="button" aria-pressed="false" title="A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It plays from this computer, not the instrument.">Click</button>
+  <span class="divider" aria-hidden="true"></span>
   <label>Bars
     <select id="bars"></select>
   </label>
@@ -65,6 +95,9 @@
       <option value="4bars">4 bars</option>
     </select>
   </label>
+</section>
+
+<section class="bar tools" aria-label="Pattern tools">
   <div class="field" role="group" aria-labelledby="repeat-label">
     <span id="repeat-label" class="group-label" title="How many evenly spaced hits each new step plays. Alt-click a step to apply this to it.">Note repeat</span>
     <div id="repeat" class="segmented">
@@ -80,25 +113,16 @@
     <button id="record" class="toggle" type="button" aria-pressed="false" title="Record notes into this sequence from the chosen input. Press Play to record in time as the pattern loops, or just press pads or keys to add them step by step.">Rec</button>
     <select id="record-input" aria-label="Record from" title="The keyboard, pads or instrument to record from"></select>
     <select id="record-channel" aria-label="Record channel" title="The MIDI channel to record, or any"></select>
-    <button id="click" class="toggle" type="button" aria-pressed="false" title="A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It plays from this computer, not the instrument.">Click</button>
   </div>
-  <label>MIDI output
-    <select id="output"></select>
-  </label>
-  <label>Channel
-    <select id="channel"></select>
-  </label>
-  <label class="check" title="Set MIDI Sync In to MIDI Clock on the MPC to follow the laptop.">
-    <input id="clock" type="checkbox"> Send clock
-  </label>
-  <label class="check" title="Plays together with the other grid when both are open in this browser. Play, stop and tempo are shared.">
-    <input id="sync" type="checkbox"> Sync
-  </label>
-  <span id="sync-peers" class="pill" role="status" hidden></span>
-  <div class="spacer"></div>
-  <button id="undo" type="button" disabled>Undo</button>
-  <button id="duplicate" type="button" title="Copy this pattern to the next empty sequence">Duplicate</button>
-  <button id="clear" type="button">Clear</button>
+  <span class="divider" aria-hidden="true"></span>
+  <div class="field" role="group" aria-label="Live track mix">
+    <label title="Moves the whole track's volume on the MPC right away. It isn't saved to the project.">Live volume
+      <input id="live-volume" class="live-slider" type="range" min="0" max="127" step="1">
+    </label>
+    <label title="Moves the whole track's pan on the MPC right away. It isn't saved to the project. Double-click to centre it.">Live pan
+      <input id="live-pan" class="live-slider" type="range" min="0" max="127" step="1">
+    </label>
+  </div>
 </section>
 
 <div class="grid-nav">
@@ -144,6 +168,7 @@
 <footer class="bar foot">
   <p id="status" class="status" role="status" aria-live="polite"></p>
   <div class="spacer"></div>
+  <button id="send" type="button" title="Plays this pattern exactly once, with MIDI start, clock and stop, for the MPC to record">Send to MPC</button>
   <span id="dirty" class="dirty" hidden>Changes kept in this browser, not yet in a project</span>
   <label>Save as
     <input id="save-name" type="text" maxlength="64" spellcheck="false">
@@ -219,7 +244,7 @@
         <tr><th scope="row"><kbd>Space</kbd></th><td>Play and stop, unless you're typing in a text box such as a name</td></tr>
         <tr><th scope="row"><kbd>1</kbd>-<kbd>8</kbd></th><td>Switch to banks A-H</td></tr>
         <tr><th scope="row"><kbd>T</kbd></th><td>Turn triplets on or off</td></tr>
-        <tr><th scope="row"><kbd>Cmd</kbd> or <kbd>Ctrl</kbd> + <kbd>Z</kbd></th><td>Undo</td></tr>
+        <tr><th scope="row"><kbd>Cmd</kbd> or <kbd>Ctrl</kbd> + <kbd>Z</kbd></th><td>Undo, and with <kbd>Shift</kbd>, Redo</td></tr>
         <tr><th scope="row"><kbd>?</kbd></th><td>Open this help</td></tr>
         <tr><th scope="row"><kbd>Esc</kbd></th><td>Close the step editor or this help</td></tr>
       </tbody>
@@ -232,6 +257,7 @@
         <tr><th scope="row">Connect card</th><td>Choose the card folder. The badge beside it shows whether the card is available.</td></tr>
         <tr><th scope="row">Sequence 1-16</th><td>Switch patterns, or click an empty slot to start one. During playback, the new slot starts when the current loop ends.</td></tr>
         <tr><th scope="row">Play</th><td>Play the pattern on the MPC, looping. Don't press play on the MPC as well.</td></tr>
+        <tr><th scope="row">Panic</th><td>Stops playback and silences any notes still sounding on the MPC.</td></tr>
         <tr><th scope="row">Send to MPC</th><td>Experimental. Plays the pattern once, so the MPC can record it while SEQ RECORD is armed on an empty sequence. Set MIDI Sync In to MIDI Clock first. This hasn't been confirmed on the hardware.</td></tr>
         <tr><th scope="row">Live BPM</th><td>Playback speed from this page. It isn't saved to the project.</td></tr>
         <tr><th scope="row">Live volume and Live pan</th><td>Move the whole track's volume or pan on the MPC right away, even while it plays. They affect every pad and aren't saved to the project. Double-click Live pan to centre it. Reload the project on the MPC to undo them.</td></tr>
@@ -240,9 +266,10 @@
         <tr><th scope="row">New note length</th><td>How long new steps last. Off records notes as long as they're held, and clicked steps last one step. Choose a longer value for loops, so they aren't cut off in Note On mode.</td></tr>
         <tr><th scope="row">Note repeat</th><td>New steps play 2-8 evenly spaced hits, drawn as bars in the step. They're saved as separate notes.</td></tr>
         <tr><th scope="row">MIDI output and Channel</th><td>Where notes are sent. The MPC is chosen automatically when it's found.</td></tr>
-        <tr><th scope="row">Sync</th><td>Plays this page together with <a href="https://pzuzarte.github.io/s1-grid/" target="_blank" rel="noopener">S-1 Grid</a> when both are open in the same browser, each with its MIDI connected. Pressing Play or Stop on either one starts or stops both, from the start of their patterns, at the tempo of the page you pressed. Changing the BPM on either changes both. Patterns of different lengths each loop in their own time. Untick it on either page to play them separately. The badge beside it shows whether the other page is connected.</td></tr>
+        <tr><th scope="row">Sync</th><td>Plays this page together with the other grids, S-1 Grid, Protein Grid, Bass Station Grid and TD-3 Grid, when they're open in the same browser, each with its MIDI connected and Sync ticked. Pressing Play or Stop on any of them starts or stops them all, from the start of their patterns, at the tempo of the page you pressed, and changing the BPM on one changes them all. The badge beside Sync shows which pages are linked. <a href="https://pzuzarte.github.io/song-grid/" target="song-grid">Song Grid</a> arranges their patterns into a song and plays them through Sync. The <b>Tools</b> menu at the top opens any of them.</td></tr>
         <tr><th scope="row">Send clock</th><td>Sends MIDI start, stop and clock with playback. Set MIDI Sync In to MIDI Clock on the MPC to follow it.</td></tr>
-        <tr><th scope="row">Undo, Duplicate, Clear</th><td>Undo an edit, copy the pattern to the next empty slot, or remove all of its notes.</td></tr>
+        <tr><th scope="row">Undo, Redo, Duplicate, Clear</th><td>Beside the sequences. Undo an edit, bring it back, copy the pattern to the next empty slot, or remove all of its notes.</td></tr>
+        <tr><th scope="row">Light mode</th><td>Switches between dark and light colours.</td></tr>
         <tr><th scope="row">Pad banks</th><td>Banks A-H hold 16 pads each. A dot means the bank has notes in this pattern. "In use" shows pads with samples or notes from any bank.</td></tr>
       </tbody>
     </table>
@@ -270,5 +297,14 @@
 <script src="sync.js"></script>
 <script src="recorder.js"></script>
 <script src="app.js"></script>
+<script>
+  // The tools menu closes when you click elsewhere or press Escape.
+  document.addEventListener("click", (event) => {
+    for (const menu of document.querySelectorAll(".tool-menu[open]")) if (!menu.contains(event.target)) menu.open = false;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") for (const menu of document.querySelectorAll(".tool-menu[open]")) menu.open = false;
+  });
+</script>
 </body>
 </html>

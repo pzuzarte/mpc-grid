@@ -14,6 +14,31 @@
   --ok: #4cc38a;
   --warn: #f5b74f;
   --label-width: clamp(92px, 14vw, 190px);
+  --strong: #fff;
+  --cell-hover: #4a4e57;
+  --error: #ff8f88;
+  --filled: #4a2a2a;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f1f2f5;
+  --panel: #ffffff;
+  --panel-2: #e8eaee;
+  --line: #c6cad2;
+  --text: #1b1e24;
+  --muted: #565d6a;
+  --cell: #e3e5ea;
+  --cell-beat: #d3d7de;
+  --accent: #c8352d;
+  --accent-text: #ffffff;
+  --on: 200, 53, 45;
+  --ok: #1d8a56;
+  --warn: #9a6200;
+  --strong: #1b1e24;
+  --cell-hover: #bfc4cc;
+  --error: #c0392b;
+  --filled: #f3d4d1;
 }
 
 * { box-sizing: border-box; }
@@ -76,7 +101,7 @@ button:hover:not(:disabled) { border-color: var(--muted); }
 button:disabled { opacity: 0.45; cursor: default; }
 button.primary { min-width: 72px; background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 
-:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+:focus-visible { outline: 2px solid var(--strong); outline-offset: 1px; }
 
 .pill {
   padding: 4px 10px;
@@ -118,9 +143,9 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
   background: var(--cell);
   font-variant-numeric: tabular-nums;
 }
-.slot.has-pattern { color: var(--text); background: #4a2a2a; border-color: rgb(var(--on)); }
-.slot[aria-current="true"] { color: var(--accent-text); background: var(--accent); border-color: #fff; font-weight: 700; }
-.slot.queued { border: 2px dashed #fff; }
+.slot.has-pattern { color: var(--text); background: var(--filled); border-color: rgb(var(--on)); }
+.slot[aria-current="true"] { color: var(--accent-text); background: var(--accent); border-color: var(--strong); font-weight: 700; }
+.slot.queued { border: 2px dashed var(--strong); }
 .slot.changed::after,
 .bank.has-notes::after {
   content: "";
@@ -149,7 +174,7 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .bank { position: relative; min-width: 42px; border-radius: 5px 5px 0 0; border-bottom: 0; background: var(--panel); color: var(--muted); }
 .bank.used { padding: 0 12px; }
 .bank[aria-current="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
-.bank[aria-current="true"].has-notes::after { background: #fff; }
+.bank[aria-current="true"].has-notes::after { background: var(--strong); }
 
 /* Columns always fit the width. Rows share the height, and scroll only if a
    very long "In use" list can't stay readable. */
@@ -230,7 +255,7 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 }
 .cell.beat { background: var(--cell-beat); }
 .cell.bar-start { box-shadow: inset 2px 0 0 var(--muted); }
-.cell:hover:not(.on) { background: #4a4e57; }
+.cell:hover:not(.on) { background: var(--cell-hover); }
 .cell.on { background: rgba(var(--on), var(--velocity, 1)); box-shadow: inset 0 0 0 1px rgb(var(--on)); }
 /* One bar per hit, so note repeats are visible at any cell size. */
 .cell.repeat {
@@ -276,10 +301,10 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
   background: rgba(255, 255, 255, 0.65);
   border-radius: 1px;
 }
-.note-handle:hover::after { width: 4px; background: #fff; }
+.note-handle:hover::after { width: 4px; background: var(--strong); }
 .cell.on { cursor: ew-resize; }
-.cell.chance { outline: 1px dashed #fff; outline-offset: -3px; }
-.cell.editing { box-shadow: 0 0 0 2px #fff; z-index: 1; }
+.cell.chance { outline: 1px dashed var(--strong); outline-offset: -3px; }
+.cell.editing { box-shadow: 0 0 0 2px var(--strong); z-index: 1; }
 .cell.off-grid::after {
   content: "";
   position: absolute;
@@ -288,14 +313,14 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--strong);
 }
 
 .playhead {
   position: absolute;
   top: 6px;
   width: 2px;
-  background: #fff;
+  background: var(--strong);
   pointer-events: none;
   z-index: 2;
 }
@@ -323,7 +348,7 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 }
 .editor-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .editor-row input[type="number"] { width: 72px; margin-left: auto; background: var(--bg); }
-.editor-row input[aria-invalid="true"] { border-color: #ff8f88; }
+.editor-row input[aria-invalid="true"] { border-color: var(--error); }
 .unit-note { color: var(--muted); font-size: 11px; }
 .editor-actions { display: flex; gap: 6px; margin-top: 10px; }
 .editor-actions #edit-done { margin-left: auto; }
@@ -371,6 +396,23 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .help-warning { padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--panel-2); }
 
 .status { margin: 0; color: var(--muted); }
-.status.error { color: #ff8f88; }
+.status.error { color: var(--error); }
 .dirty { color: var(--warn); font-size: 12px; }
 .hint { margin: 0; padding: 0 16px 7px; background: var(--panel); color: var(--muted); font-size: 12px; }
+
+/* The menu of every tool, the same on each page. Each opens in its own tab, and a tab
+   already open for it is reused, so the grids can stay open together. */
+.tool-menu { position: relative; }
+.tool-menu summary { display: inline-flex; align-items: center; height: 30px; padding: 0 11px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; cursor: pointer; list-style: none; user-select: none; }
+.tool-menu summary::-webkit-details-marker { display: none; }
+.tool-menu summary::after { content: ""; margin-left: 7px; border: 4px solid transparent; border-top-color: currentColor; transform: translateY(2px); }
+.tool-menu[open] summary, .tool-menu summary:hover { border-color: var(--muted); }
+.tool-menu nav { position: absolute; z-index: 50; top: calc(100% + 4px); right: 0; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+.tool-menu nav a { padding: 7px 10px; color: var(--text); border-radius: 4px; font-size: 13px; text-decoration: none; }
+.tool-menu nav a:hover, .tool-menu nav a:focus-visible { background: var(--panel-2); }
+.tool-menu nav a[aria-current="page"] { color: var(--accent); font-weight: 700; }
+.divider { width: 1px; height: 22px; background: var(--line); }
+.tool-menu nav hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+.tool-menu nav button { height: auto; padding: 7px 10px; color: var(--text); text-align: left; background: none; border: 0; border-radius: 4px; font-size: 13px; }
+.tool-menu nav button:hover { background: var(--panel-2); }
+.tools { gap: 6px 10px; padding-top: 5px; padding-bottom: 5px; font-size: 12px; }

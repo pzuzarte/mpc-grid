@@ -46,6 +46,7 @@ const state = {
   editor: null,
   dirty: new Set(),
   undo: [],
+  redo: [],
   midi: null,
   output: null,
   channel: 0,
@@ -257,6 +258,7 @@ async function loadView(view) {
   state.view = view;
   state.dirty = new Set();
   state.undo = [];
+  state.redo = [];
   state.bank = 0;
   state.queuedKey = null;
 
@@ -334,6 +336,7 @@ async function saveCopy() {
     if (!sequence()) state.currentKey = state.view.sequences[0].key;
     state.dirty = new Set();
     state.undo = [];
+    state.redo = [];
     $("save-name").value = nextSaveName(saved.name);
     await refreshProjects();
     renderAll();
@@ -785,6 +788,7 @@ function endLengthDrag() {
 function renderChrome() {
   $("dirty").hidden = !hasChanges();
   $("undo").disabled = state.undo.length === 0;
+  $("redo").disabled = state.redo.length === 0;
   updateFileButtons();
   renderSlots();
   renderBanks();
@@ -843,6 +847,7 @@ function duplicateSequence() {
   }
   stop();
   state.undo = [];
+  state.redo = [];
   const existing = sequenceByKey(target);
   const copy = JSON.parse(JSON.stringify(source));
   copy.key = target;
@@ -872,15 +877,16 @@ function setBars(bars) {
 
 /* ---------- Editing ---------- */
 
+// A sequence as it is now, for Undo and Redo to bring back.
+function snapshotOf(key) {
+  const seq = sequenceByKey(key);
+  return { key, lengthPulses: seq.lengthPulses, notes: JSON.stringify(notesOf(seq)), dirtyBefore: state.dirty.has(key) };
+}
+
 function remember() {
-  const seq = sequence();
-  state.undo.push({
-    key: seq.key,
-    lengthPulses: seq.lengthPulses,
-    notes: JSON.stringify(notesOf(seq)),
-    dirtyBefore: state.dirty.has(seq.key),
-  });
+  state.undo.push(snapshotOf(sequence().key));
   if (state.undo.length > 200) state.undo.shift();
+  state.redo = [];
 }
 
 function markDirty() {
@@ -889,13 +895,20 @@ function markDirty() {
   scheduleDraft();
 }
 
-function undo() {
-  const last = state.undo.pop();
+const undo = () => stepHistory(state.undo, state.redo);
+const redo = () => stepHistory(state.redo, state.undo);
+
+// Brings back the last state from one list, keeping the current one in the other.
+function stepHistory(from, to) {
+  const last = from.pop();
   if (!last) return;
   const seq = sequenceByKey(last.key);
+  if (!seq) return;
+  to.push(snapshotOf(last.key));
   seq.lengthPulses = last.lengthPulses;
   seq.notes[track().name] = JSON.parse(last.notes);
-  if (!last.dirtyBefore) state.dirty.delete(last.key);
+  if (last.dirtyBefore) state.dirty.add(last.key);
+  else state.dirty.delete(last.key);
   state.currentKey = last.key;
   renderAll();
   scheduleDraft();
@@ -1337,6 +1350,34 @@ function sendController(number, value, atTime) {
   else state.output.send(message, atTime);
 }
 
+const CC_ALL_SOUND_OFF = 120;
+const CC_ALL_NOTES_OFF = 123;
+
+// Stops playback and silences anything still sounding on the MPC.
+function panic() {
+  stop();
+  if (!state.output) {
+    setStatus("No MIDI output connected.", true);
+    return;
+  }
+  sendController(CC_ALL_SOUND_OFF, 0);
+  sendController(CC_ALL_NOTES_OFF, 0);
+  setStatus("All notes off.");
+}
+
+const THEME_KEY = "mpc-grid-theme";
+
+function setTheme(light) {
+  if (light) document.documentElement.dataset.theme = "light";
+  else delete document.documentElement.dataset.theme;
+  $("theme-toggle").textContent = light ? "Dark mode" : "Light mode";
+  try {
+    localStorage.setItem(THEME_KEY, light ? "light" : "dark");
+  } catch {
+    // It's just not remembered.
+  }
+}
+
 /* ---------- Playback ---------- */
 
 const ticker = new Worker(URL.createObjectURL(new Blob(
@@ -1588,6 +1629,9 @@ function bindControls() {
   $("bpm").addEventListener("change", announceTempo);
   $("send").addEventListener("click", sendToMpc);
   $("undo").addEventListener("click", undo);
+  $("redo").addEventListener("click", redo);
+  $("stop-all").addEventListener("click", panic);
+  $("theme-toggle").addEventListener("click", () => setTheme(document.documentElement.dataset.theme !== "light"));
   setUpRecorder();
   $("duplicate").addEventListener("click", duplicateSequence);
   $("clear").addEventListener("click", () => {
@@ -1630,9 +1674,10 @@ function bindControls() {
       return;
     }
     if (typing(event.target) || event.target.closest?.("#note-editor")) return;
-    if ((event.metaKey || event.ctrlKey) && event.key === "z") {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
       event.preventDefault();
-      undo();
+      if (event.shiftKey) redo();
+      else undo();
     } else if (/^[1-8]$/.test(event.key) && !event.metaKey && !event.ctrlKey) {
       setBank(Number(event.key) - 1);
     } else if (event.key === "t" && !event.metaKey && !event.ctrlKey) {
@@ -1656,6 +1701,7 @@ function missingBrowserFeatures() {
 async function start() {
   bindControls();
   bindGridEvents();
+  setTheme(document.documentElement.dataset.theme === "light");
   bindNoteEditor();
   const missing = missingBrowserFeatures();
   if (missing.length) {
