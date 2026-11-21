@@ -14,14 +14,15 @@ const Sync = (() => {
 
   const validBpm = (bpm) => Number.isFinite(bpm) && bpm >= 20 && bpm <= 300;
 
-  // One page's part of a song, checked, or null if there isn't one for it.
-  // Patterns are counted from 0, and null is silence.
+  // One page's part of a song, checked, or null if there isn't one for it. Patterns are
+  // counted from 0, or for TD-3 Grid named by a string, and null is silence.
   function songPart(plan, name) {
     if (!plan || typeof plan !== "object" || !Number.isInteger(plan.bars) || plan.bars < 1) return null;
     const cues = plan.parts?.[name];
     if (!Array.isArray(cues)) return null;
     const valid = cues.filter((cue) => cue && Number.isInteger(cue.bar) && cue.bar >= 0 && cue.bar < plan.bars
-      && (cue.pattern === null || (Number.isInteger(cue.pattern) && cue.pattern >= 0 && cue.pattern < 16)));
+      && (cue.pattern === null || (Number.isInteger(cue.pattern) && cue.pattern >= 0 && cue.pattern < 16)
+        || (typeof cue.pattern === "string" && cue.pattern.length > 0 && cue.pattern.length <= 64)));
     return { bars: plan.bars, loop: Boolean(plan.loop), cues: valid.sort((a, b) => a.bar - b.bar) };
   }
 

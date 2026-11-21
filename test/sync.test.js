@@ -121,6 +121,9 @@ test("each page gets its own part of a song, checked", () => {
   assert.equal(Sync.songPart(plan, "Protein Grid"), null);
   assert.equal(Sync.songPart({ bars: 0, parts: {} }, "S-1 Grid"), null);
   assert.equal(Sync.songPart(null, "S-1 Grid"), null);
+  // TD-3 Grid's patterns are named by a string.
+  const td3 = Sync.songPart({ bars: 4, parts: { "TD-3 Grid": [{ bar: 0, pattern: "grid" }, { bar: 2, pattern: "p1abc" }, { bar: 3, pattern: "" }] } }, "TD-3 Grid");
+  assert.deepEqual(td3.cues, [{ bar: 0, pattern: "grid" }, { bar: 2, pattern: "p1abc" }]);
   assert.deepEqual(Sync.songCue(part, 8), { bar: 8, pattern: 2 });
   assert.equal(Sync.songCue(part, 9), undefined);
 });
