@@ -16,6 +16,13 @@ const Sync = (() => {
 
   // One page's part of a song, checked, or null if there isn't one for it. Patterns are
   // counted from 0, or for TD-3 Grid named by a string, and null is silence.
+  // Stretches of bars that repeat until they're let go, checked: [{ start, end }].
+  function cleanLoops(loops, bars) {
+    if (!Array.isArray(loops)) return [];
+    return loops.filter((item) => item && Number.isInteger(item.start) && Number.isInteger(item.end)
+      && item.start >= 0 && item.end > item.start && item.end <= bars).map(({ start, end }) => ({ start, end }));
+  }
+
   function songPart(plan, name) {
     if (!plan || typeof plan !== "object" || !Number.isInteger(plan.bars) || plan.bars < 1) return null;
     const cues = plan.parts?.[name];
@@ -23,45 +30,43 @@ const Sync = (() => {
     const valid = cues.filter((cue) => cue && Number.isInteger(cue.bar) && cue.bar >= 0 && cue.bar < plan.bars
       && (cue.pattern === null || (Number.isInteger(cue.pattern) && cue.pattern >= 0 && cue.pattern < 16)
         || (typeof cue.pattern === "string" && cue.pattern.length > 0 && cue.pattern.length <= 64)));
-    return { bars: plan.bars, loop: Boolean(plan.loop), cues: valid.sort((a, b) => a.bar - b.bar) };
+    return { bars: plan.bars, loop: Boolean(plan.loop), cues: valid.sort((a, b) => a.bar - b.bar), loops: cleanLoops(plan.loops, plan.bars) };
   }
 
   // The cue that starts at a bar, if one does.
   const songCue = (part, bar) => part.cues.find((cue) => cue.bar === bar);
 
-  /* While a song plays, Song Grid can move it: jump to another bar, or hold a stretch of
-     bars, such as a section, repeating it until it's let go. Each move names the bar it
-     happens on, counted from the start of playback however the song has moved, so every
-     page makes it at the same moment. A move is { atBar, toBar, hold }, where toBar and
-     hold are each left out when they don't change, and hold is { start, end } or null. */
+  /* A song can have looped sections, which repeat each time they're reached until they're
+     let go. While it plays, Song Grid can jump to another bar, or change which sections
+     loop. Each move names the bar it happens on, counted from the start of playback however
+     the song has moved, so every page makes it at the same moment. A move is
+     { atBar, toBar, loops }, where toBar and loops are each left out when they don't
+     change, and loops is the new list of looped stretches. */
   function songMove(data, bars) {
     if (!data || !Number.isInteger(data.atBar) || data.atBar < 1) return null;
     const move = { atBar: data.atBar };
     if (Number.isInteger(data.toBar) && data.toBar >= 0 && data.toBar < bars) move.toBar = data.toBar;
-    if (data.hold === null) move.hold = null;
-    else if (data.hold && Number.isInteger(data.hold.start) && Number.isInteger(data.hold.end)
-      && data.hold.start >= 0 && data.hold.end > data.hold.start && data.hold.end <= bars) {
-      move.hold = { start: data.hold.start, end: data.hold.end };
-    }
-    return "toBar" in move || "hold" in move ? move : null;
+    if (Array.isArray(data.loops)) move.loops = cleanLoops(data.loops, bars);
+    return "toBar" in move || "loops" in move ? move : null;
   }
 
   // The song bar that plays next. part also holds bar, the bar playing, played, how many
-  // bars have played since the start, hold and moves. Returns false once the song ends.
+  // bars have played since the start, looping and moves. Returns false once the song ends.
   function songNextBar(part) {
     part.played += 1;
     let bar = part.bar + 1;
     let jumped = false;
     for (const move of part.moves.filter((item) => item.atBar === part.played)) {
-      if ("hold" in move) part.hold = move.hold;
+      if ("loops" in move) part.looping = move.loops;
       if ("toBar" in move) {
         bar = move.toBar;
         jumped = true;
       }
     }
     part.moves = part.moves.filter((item) => item.atBar > part.played);
-    // A held stretch repeats from its start when it's played through.
-    if (!jumped && part.hold && part.bar < part.hold.end && bar >= part.hold.end) bar = part.hold.start;
+    // A looped stretch goes back to its start when it's played through.
+    const looped = !jumped && part.looping.find((item) => part.bar >= item.start && part.bar < item.end && bar >= item.end);
+    if (looped) bar = looped.start;
     if (bar >= part.bars) {
       if (!part.loop) return false;
       bar = 0;
@@ -70,8 +75,8 @@ const Sync = (() => {
     return true;
   }
 
-  // A part ready to play from its first bar.
-  const songStart = (part) => Object.assign(part, { bar: 0, played: 0, hold: null, moves: [] });
+  // A part ready to play from its first bar, with its looped sections as planned.
+  const songStart = (part) => Object.assign(part, { bar: 0, played: 0, looping: [...(part.loops || [])], moves: [] });
   const toLocal = (wall) => performance.now() + wall - Date.now();
   const toWall = (local) => Date.now() + local - performance.now();
 

@@ -117,7 +117,7 @@ test("each page gets its own part of a song, checked", () => {
     },
   };
   const part = Sync.songPart(plan, "S-1 Grid");
-  assert.deepEqual(part, { bars: 16, loop: true, cues: [{ bar: 0, pattern: 0 }, { bar: 8, pattern: 2 }, { bar: 12, pattern: null }] });
+  assert.deepEqual(part, { bars: 16, loop: true, cues: [{ bar: 0, pattern: 0 }, { bar: 8, pattern: 2 }, { bar: 12, pattern: null }], loops: [] });
   assert.equal(Sync.songPart(plan, "Protein Grid"), null);
   assert.equal(Sync.songPart({ bars: 0, parts: {} }, "S-1 Grid"), null);
   assert.equal(Sync.songPart(null, "S-1 Grid"), null);
@@ -143,7 +143,7 @@ test("a song sent before play reaches the other pages first", async () => {
   conductor.link.announcePlay(120);
   await until(() => order.length >= 2);
   assert.deepEqual(order, ["song", "play"]);
-  assert.deepEqual(parts[0], { bars: 4, loop: false, cues: [{ bar: 0, pattern: 3 }] });
+  assert.deepEqual(parts[0], { bars: 4, loop: false, cues: [{ bar: 0, pattern: 3 }], loops: [] });
 });
 
 // Plays a part bar by bar, returning the song bars heard, or "end" when it ends.
@@ -174,21 +174,30 @@ test("a move jumps on the bar it names", () => {
   assert.deepEqual(heard, [0, 1, 8, 9, 10, 11]);
 });
 
-test("a held section repeats until it's let go", () => {
-  const part = { bars: 8, loop: false };
+test("a looped section repeats each time it's reached, until it's let go", () => {
+  // Bars 2 to 3 loop from the start, and are let go on the eighth bar played.
+  const part = { bars: 8, loop: false, loops: [{ start: 2, end: 4 }] };
   Sync.songStart(part);
-  // Bars 2 to 3 are held from the second bar, and let go on the eighth bar played.
-  part.moves.push({ atBar: 1, hold: { start: 2, end: 4 } }, { atBar: 7, hold: null });
+  part.moves.push({ atBar: 7, loops: [] });
   const heard = [part.bar];
   for (let i = 0; i < 10; i += 1) { Sync.songNextBar(part); heard.push(part.bar); }
   assert.deepEqual(heard, [0, 1, 2, 3, 2, 3, 2, 3, 4, 5, 6]);
 });
 
+test("a jump leaves a looped section, and a loop can start while it plays", () => {
+  const part = { bars: 8, loop: false, loops: [] };
+  Sync.songStart(part);
+  part.moves.push({ atBar: 2, loops: [{ start: 0, end: 2 }] }, { atBar: 5, toBar: 6 });
+  const heard = [part.bar];
+  for (let i = 0; i < 7; i += 1) { if (!Sync.songNextBar(part)) { heard.push("end"); break; } heard.push(part.bar); }
+  assert.deepEqual(heard, [0, 1, 0, 1, 0, 6, 7, "end"]);
+});
+
 test("moves from Song Grid are checked against the song", () => {
   assert.deepEqual(Sync.songMove({ atBar: 3, toBar: 4 }, 8), { atBar: 3, toBar: 4 });
-  assert.deepEqual(Sync.songMove({ atBar: 3, hold: null }, 8), { atBar: 3, hold: null });
-  assert.deepEqual(Sync.songMove({ atBar: 3, hold: { start: 0, end: 4 } }, 8), { atBar: 3, hold: { start: 0, end: 4 } });
+  assert.deepEqual(Sync.songMove({ atBar: 3, loops: [] }, 8), { atBar: 3, loops: [] });
+  assert.deepEqual(Sync.songMove({ atBar: 3, loops: [{ start: 0, end: 4 }, { start: 6, end: 9 }] }, 8), { atBar: 3, loops: [{ start: 0, end: 4 }] });
   assert.equal(Sync.songMove({ atBar: 3, toBar: 9 }, 8), null);
   assert.equal(Sync.songMove({ atBar: 0, toBar: 1 }, 8), null);
-  assert.equal(Sync.songMove({ atBar: 3, hold: { start: 4, end: 2 } }, 8), null);
+  assert.equal(Sync.songMove({ atBar: 3 }, 8), null);
 });
