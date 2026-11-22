@@ -101,7 +101,13 @@ const Sync = (() => {
     return () => worker.terminate();
   }
 
-  function connect({ name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {}, songMoved = () => {} }) {
+  /* Song Grid can ask every open grid for its assets: its patterns, and its sound where it
+     has one. assets() gives them, or a promise of them, as { patterns, sound }, and each
+     reply reaches Song Grid's assetsReceived(name, assets). */
+  function connect({
+    name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {}, songMoved = () => {},
+    assets = null, assetsReceived = () => {},
+  }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
     try {
       checkbox.checked = localStorage.getItem(storageKey) !== "off";
@@ -156,6 +162,12 @@ const Sync = (() => {
           song(songPart(data.plan, name));
         } else if (data.type === "song-move") {
           songMoved(data.move);
+        } else if (data.type === "assets-request" && assets) {
+          Promise.resolve(assets()).then((reply) => {
+            if (reply && active()) post({ type: "assets", request: data.request, assets: reply });
+          }).catch(() => {});
+        } else if (data.type === "assets" && data.assets && typeof data.assets === "object") {
+          assetsReceived(data.from, data.assets, data.request);
         } else if (data.type === "stop") {
           stop();
         } else if (data.type === "tempo" && validBpm(data.bpm) && Number.isFinite(data.at)) {
@@ -189,6 +201,13 @@ const Sync = (() => {
         if (active()) post({ type: "stop" });
       },
       // Sent just before announcePlay, so each page has its part when it starts.
+      // Asks every open grid for its assets. Returns the request's id, sent back with each reply.
+      requestAssets() {
+        if (!active()) return null;
+        const request = `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        post({ type: "assets-request", request });
+        return request;
+      },
       // Sent ahead of the bar it happens on. See songMove.
       announceSongMove(move) {
         if (active()) post({ type: "song-move", move });

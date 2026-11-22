@@ -1461,6 +1461,17 @@ function renderPeers(names) {
 }
 
 // Plays together with the other grid when both are open. See sync.js.
+// What Song Grid keeps of this grid for a song: its patterns, and its sound where it has
+// one. See sync.js.
+function collectAssets() {
+  const patterns = (state.view?.sequences || []).filter((seq) => notesOf(seq).length).map((seq) => ({
+    id: `seq:${seq.key}`, ref: seq.key, label: seq.name || `Sequence ${seq.key + 1}`,
+    length: `${Math.round((seq.lengthPulses / pulsesPerBar(seq)) * 100) / 100} bars`, notes: notesOf(seq).length,
+    data: { key: seq.key, name: seq.name, lengthPulses: seq.lengthPulses, beatsPerBar: seq.beatsPerBar, beatLength: seq.beatLength, notes: JSON.parse(JSON.stringify(notesOf(seq))) },
+  }));
+  return { patterns, sound: null };
+}
+
 const link = Sync.connect({
   name: "MPC Grid",
   checkbox: $("sync"),
@@ -1477,6 +1488,7 @@ const link = Sync.connect({
   },
   stop: () => stop({ fromLink: true }),
   song: (part) => { pendingSong = part; },
+  assets: collectAssets,
   songMoved(data) {
     const move = song && Sync.songMove(data, song.bars);
     if (move) song.moves.push(move);

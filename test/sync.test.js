@@ -201,3 +201,22 @@ test("moves from Song Grid are checked against the song", () => {
   assert.equal(Sync.songMove({ atBar: 0, toBar: 1 }, 8), null);
   assert.equal(Sync.songMove({ atBar: 3 }, 8), null);
 });
+
+test("a grid sends its assets when Song Grid asks", async () => {
+  const replies = [];
+  const box = () => ({ checked: true, addEventListener() {} });
+  const conductor = Sync.connect({
+    name: "Song Grid", checkbox: box(), storageKey: "assets-song", start: () => true, stop() {}, tempo() {}, status() {},
+    assetsReceived: (from, assets, request) => replies.push({ from, assets, request }),
+  });
+  const grid = Sync.connect({
+    name: "S-1 Grid", checkbox: box(), storageKey: "assets-grid", start: () => true, stop() {}, tempo() {}, status() {},
+    assets: async () => ({ patterns: [{ id: "slot:0", label: "Pattern 1" }], sound: null }),
+  });
+  opened.push(conductor, grid);
+  const request = conductor.requestAssets();
+  await until(() => replies.length > 0);
+  assert.equal(replies[0].from, "S-1 Grid");
+  assert.equal(replies[0].request, request);
+  assert.deepEqual(replies[0].assets.patterns, [{ id: "slot:0", label: "Pattern 1" }]);
+});
