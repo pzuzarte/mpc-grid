@@ -1461,6 +1461,44 @@ function renderPeers(names) {
 }
 
 // Plays together with the other grid when both are open. See sync.js.
+// Puts the sequences kept with a song in Song Grid back into the sequences they came
+// from, on this track. Nothing is sent to the MPC until you save. Undo brings back each
+// sequence as it was, one at a time. See sync.js.
+function loadAssets(assets) {
+  if (!state.view) return { ok: false, message: "Open a project first." };
+  const put = [];
+  let missing = 0;
+  for (const item of Array.isArray(assets.patterns) ? assets.patterns : []) {
+    const data = item?.data;
+    if (!data || !Number.isInteger(item.ref) || !Array.isArray(data.notes) || !Number.isFinite(data.lengthPulses) || data.lengthPulses <= 0) continue;
+    const seq = sequenceByKey(item.ref);
+    if (!seq) {
+      missing += 1;
+      continue;
+    }
+    if (put.includes(seq)) continue;
+    state.undo.push(snapshotOf(seq.key));
+    if (state.undo.length > 200) state.undo.shift();
+    seq.lengthPulses = data.lengthPulses;
+    seq.notes[track().name] = JSON.parse(JSON.stringify(data.notes));
+    state.dirty.add(seq.key);
+    put.push(seq);
+  }
+  if (put.length) {
+    state.redo = [];
+    renderAll();
+    scheduleDraft();
+  }
+  const names = put.map((seq) => seq.name || `Sequence ${seq.key + 1}`);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names.join("");
+  const parts = [];
+  if (put.length) parts.push(`Put ${list} back. Save to send ${put.length === 1 ? "it" : "them"} to the MPC. Undo here brings back what was there.`);
+  if (missing) parts.push(`${missing} ${missing === 1 ? "sequence isn't" : "sequences aren't"} in this project, so ${missing === 1 ? "it was" : "they were"} left out.`);
+  const message = parts.join(" ") || "There was nothing to put in.";
+  setStatus(`From Song Grid: ${message}`, !put.length || missing > 0);
+  return { ok: put.length > 0 && !missing, message };
+}
+
 // What Song Grid keeps of this grid for a song: its patterns, and its sound where it has
 // one. See sync.js.
 function collectAssets() {
@@ -1489,6 +1527,7 @@ const link = Sync.connect({
   stop: () => stop({ fromLink: true }),
   song: (part) => { pendingSong = part; },
   assets: collectAssets,
+  loadAssets,
   songMoved(data) {
     const move = song && Sync.songMove(data, song.bars);
     if (move) song.moves.push(move);

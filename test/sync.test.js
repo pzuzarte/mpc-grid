@@ -220,3 +220,41 @@ test("a grid sends its assets when Song Grid asks", async () => {
   assert.equal(replies[0].request, request);
   assert.deepEqual(replies[0].assets.patterns, [{ id: "slot:0", label: "Pattern 1" }]);
 });
+
+test("Song Grid sends a grid its assets to put back, and hears what it did", async () => {
+  const results = [];
+  const loaded = [];
+  const box = () => ({ checked: true, addEventListener() {} });
+  const conductor = Sync.connect({
+    name: "Song Grid", checkbox: box(), storageKey: "load-song", start: () => true, stop() {}, tempo() {}, status() {},
+    assetsLoaded: (from, result, request) => results.push({ from, result, request }),
+  });
+  const grid = Sync.connect({
+    name: "S-1 Grid", checkbox: box(), storageKey: "load-grid", start: () => true, stop() {}, tempo() {}, status() {},
+    loadAssets: async (assets) => { loaded.push(assets); return { ok: true, message: "Put 1 pattern in." }; },
+  });
+  const other = Sync.connect({
+    name: "Protein Grid", checkbox: box(), storageKey: "load-other", start: () => true, stop() {}, tempo() {}, status() {},
+    loadAssets: () => { throw new Error("only S-1 Grid's assets were sent"); },
+  });
+  opened.push(conductor, grid, other);
+  const request = conductor.sendAssets("S-1 Grid", { patterns: [], sound: null });
+  await until(() => results.length > 0);
+  assert.equal(loaded.length, 1);
+  assert.deepEqual(results, [{ from: "S-1 Grid", result: { ok: true, message: "Put 1 pattern in." }, request }]);
+});
+
+test("patterns for numbered slots are checked before they're put in", () => {
+  const slots = Sync.assetSlots({ patterns: [
+    { ref: 5, data: { bars: 2, notes: [{ note: 60 }] } },
+    { ref: 1, data: { bars: 1, notes: [] } },
+    { ref: 5, data: { bars: 4, notes: [] } },
+    { ref: 16, data: { bars: 1, notes: [] } },
+    { ref: "grid", data: { bars: 1, notes: [] } },
+    { ref: 2, data: { bars: 0, notes: [] } },
+    { ref: 3, data: { bars: 1 } },
+    null,
+  ] });
+  assert.deepEqual(slots, [{ index: 1, data: { bars: 1, notes: [] } }, { index: 5, data: { bars: 2, notes: [{ note: 60 }] } }]);
+  assert.deepEqual(Sync.assetSlots(null), []);
+});

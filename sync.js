@@ -101,12 +101,29 @@ const Sync = (() => {
     return () => worker.terminate();
   }
 
+  /* Patterns sent to a grid with numbered slots, checked: [{ index, data }] for each one
+     that names a slot and has notes to put in it, in slot order, one per slot. */
+  function assetSlots(assets, slots = 16) {
+    const found = new Map();
+    for (const item of Array.isArray(assets?.patterns) ? assets.patterns : []) {
+      const data = item?.data;
+      if (!item || !Number.isInteger(item.ref) || item.ref < 0 || item.ref >= slots || found.has(item.ref)) continue;
+      if (!data || !Array.isArray(data.notes) || !Number.isFinite(data.bars) || data.bars <= 0 || data.bars > 64) continue;
+      found.set(item.ref, JSON.parse(JSON.stringify(data)));
+    }
+    return [...found].sort((a, b) => a[0] - b[0]).map(([index, data]) => ({ index, data }));
+  }
+
   /* Song Grid can ask every open grid for its assets: its patterns, and its sound where it
      has one. assets() gives them, or a promise of them, as { patterns, sound }, and each
-     reply reaches Song Grid's assetsReceived(name, assets). */
+     reply reaches Song Grid's assetsReceived(name, assets).
+
+     It can also send a grid the assets kept with a song, to put back. loadAssets(assets)
+     puts them in, and gives what it did, or a promise of it, as { ok, message }, which
+     reaches Song Grid's assetsLoaded(name, result). */
   function connect({
     name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {}, songMoved = () => {},
-    assets = null, assetsReceived = () => {},
+    assets = null, assetsReceived = () => {}, loadAssets = null, assetsLoaded = () => {},
   }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
     try {
@@ -168,6 +185,13 @@ const Sync = (() => {
           }).catch(() => {});
         } else if (data.type === "assets" && data.assets && typeof data.assets === "object") {
           assetsReceived(data.from, data.assets, data.request);
+        } else if (data.type === "assets-load" && data.to === name && loadAssets && data.assets && typeof data.assets === "object") {
+          const reply = (result) => {
+            if (active()) post({ type: "assets-loaded", request: data.request, ok: Boolean(result?.ok), message: String(result?.message || "") });
+          };
+          Promise.resolve().then(() => loadAssets(data.assets)).then(reply, () => reply({ ok: false, message: "Couldn't put them in." }));
+        } else if (data.type === "assets-loaded") {
+          assetsLoaded(data.from, { ok: Boolean(data.ok), message: typeof data.message === "string" ? data.message.slice(0, 300) : "" }, data.request);
         } else if (data.type === "stop") {
           stop();
         } else if (data.type === "tempo" && validBpm(data.bpm) && Number.isFinite(data.at)) {
@@ -208,6 +232,13 @@ const Sync = (() => {
         post({ type: "assets-request", request });
         return request;
       },
+      // Sends one grid a song's assets to put back. Returns the request's id, or null.
+      sendAssets(to, assets) {
+        if (!active()) return null;
+        const request = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        post({ type: "assets-load", to, request, assets });
+        return request;
+      },
       // Sent ahead of the bar it happens on. See songMove.
       announceSongMove(move) {
         if (active()) post({ type: "song-move", move });
@@ -226,7 +257,7 @@ const Sync = (() => {
     };
   }
 
-  return { aligned, connect, songCue, songMove, songNextBar, songPart, songStart };
+  return { aligned, assetSlots, connect, songCue, songMove, songNextBar, songPart, songStart };
 })();
 
 if (typeof module !== "undefined") module.exports = Sync;
