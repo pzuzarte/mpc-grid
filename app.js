@@ -1400,6 +1400,11 @@ let song = null;
 let pendingSong = null;
 
 // Called at the start of each chunk. Returns false once the song has ended.
+// A song's cue can change the tempo.
+function setSongBpm(bpm) {
+  if (bpm !== currentBpm()) $("bpm").value = bpm;
+}
+
 function followSong() {
   if (song.pulse % SONG_BAR !== 0) return true;
   // Each bar after the first moves the song on, following any move from Song Grid.
@@ -1410,19 +1415,24 @@ function followSong() {
   }
   const bar = song.bar;
   const cue = Sync.songCue(song, bar);
-  if (!cue) return true;
-  song.muted = !Number.isInteger(cue.pattern);
-  if (!song.muted && cue.pattern !== state.currentKey) switchTo(cue.pattern);
-  state.nextPulse = 0;
-  setStatus(song.muted ? `Song: silent from bar ${bar + 1}.` : `Song: sequence ${cue.pattern + 1} from bar ${bar + 1}.`);
+  if (cue) {
+    song.off = !Number.isInteger(cue.pattern);
+    if (!song.off && cue.pattern !== state.currentKey) switchTo(cue.pattern);
+    if (cue.bpm) setSongBpm(cue.bpm);
+    state.nextPulse = 0;
+    setStatus(song.off ? `Song: silent from bar ${bar + 1}.` : `Song: sequence ${cue.pattern + 1} from bar ${bar + 1}.`);
+  }
+  // Song Grid's mute and solo buttons can silence this grid from any bar.
+  song.muted = song.off || Sync.songSilenced(song);
   return true;
 }
 
 function schedule() {
   const horizon = performance.now() + SCHEDULE_AHEAD_MS;
-  const ms = msPerPulse();
+  let ms = msPerPulse();
   while (state.nextTime < horizon) {
     if (song && !followSong()) return;
+    ms = msPerPulse(); // A song can change the tempo at a bar.
     const seq = sequence();
     const from = state.nextPulse;
     const to = from + CHUNK_PULSES;

@@ -23,15 +23,34 @@ const Sync = (() => {
       && item.start >= 0 && item.end > item.start && item.end <= bars).map(({ start, end }) => ({ start, end }));
   }
 
+  // The grids that Song Grid has muted, checked: a list of names.
+  const cleanMutes = (mutes) => (Array.isArray(mutes) ? mutes.filter((item) => typeof item === "string" && item.length <= 40).slice(0, 16) : []);
+
+  /* Besides its pattern, a cue can change the tempo (bpm), shift the notes by some
+     semitones (transpose), and send a program change (program) to pick a preset. */
+  function cleanCue(cue) {
+    const clean = { bar: cue.bar, pattern: cue.pattern };
+    if (Number.isFinite(cue.bpm) && validBpm(cue.bpm)) clean.bpm = cue.bpm;
+    if (Number.isInteger(cue.transpose) && cue.transpose >= -24 && cue.transpose <= 24 && cue.transpose !== 0) clean.transpose = cue.transpose;
+    if (Number.isInteger(cue.program) && cue.program >= 0 && cue.program <= 127) clean.program = cue.program;
+    return clean;
+  }
+
   function songPart(plan, name) {
     if (!plan || typeof plan !== "object" || !Number.isInteger(plan.bars) || plan.bars < 1) return null;
     const cues = plan.parts?.[name];
     if (!Array.isArray(cues)) return null;
     const valid = cues.filter((cue) => cue && Number.isInteger(cue.bar) && cue.bar >= 0 && cue.bar < plan.bars
       && (cue.pattern === null || (Number.isInteger(cue.pattern) && cue.pattern >= 0 && cue.pattern < 16)
-        || (typeof cue.pattern === "string" && cue.pattern.length > 0 && cue.pattern.length <= 64)));
-    return { bars: plan.bars, loop: Boolean(plan.loop), cues: valid.sort((a, b) => a.bar - b.bar), loops: cleanLoops(plan.loops, plan.bars) };
+        || (typeof cue.pattern === "string" && cue.pattern.length > 0 && cue.pattern.length <= 64))).map(cleanCue);
+    return {
+      name, bars: plan.bars, loop: Boolean(plan.loop), cues: valid.sort((a, b) => a.bar - b.bar),
+      loops: cleanLoops(plan.loops, plan.bars), mutes: cleanMutes(plan.mutes),
+    };
   }
+
+  // Whether Song Grid has muted this part's grid, with its mute and solo buttons.
+  const songSilenced = (part) => Boolean(part.name && part.mutes?.includes(part.name));
 
   // The cue that starts at a bar, if one does.
   const songCue = (part, bar) => part.cues.find((cue) => cue.bar === bar);
@@ -40,14 +59,15 @@ const Sync = (() => {
      let go. While it plays, Song Grid can jump to another bar, or change which sections
      loop. Each move names the bar it happens on, counted from the start of playback however
      the song has moved, so every page makes it at the same moment. A move is
-     { atBar, toBar, loops }, where toBar and loops are each left out when they don't
-     change, and loops is the new list of looped stretches. */
+     { atBar, toBar, loops, mutes }, where each is left out when it doesn't change, loops
+     is the new list of looped stretches, and mutes the grids muted from then on. */
   function songMove(data, bars) {
     if (!data || !Number.isInteger(data.atBar) || data.atBar < 1) return null;
     const move = { atBar: data.atBar };
     if (Number.isInteger(data.toBar) && data.toBar >= 0 && data.toBar < bars) move.toBar = data.toBar;
     if (Array.isArray(data.loops)) move.loops = cleanLoops(data.loops, bars);
-    return "toBar" in move || "loops" in move ? move : null;
+    if (Array.isArray(data.mutes)) move.mutes = cleanMutes(data.mutes);
+    return "toBar" in move || "loops" in move || "mutes" in move ? move : null;
   }
 
   // The song bar that plays next. part also holds bar, the bar playing, played, how many
@@ -58,6 +78,7 @@ const Sync = (() => {
     let jumped = false;
     for (const move of part.moves.filter((item) => item.atBar === part.played)) {
       if ("loops" in move) part.looping = move.loops;
+      if ("mutes" in move) part.mutes = move.mutes;
       if ("toBar" in move) {
         bar = move.toBar;
         jumped = true;
@@ -76,7 +97,7 @@ const Sync = (() => {
   }
 
   // A part ready to play from its first bar, with its looped sections as planned.
-  const songStart = (part) => Object.assign(part, { bar: 0, played: 0, looping: [...(part.loops || [])], moves: [] });
+  const songStart = (part) => Object.assign(part, { bar: 0, played: 0, looping: [...(part.loops || [])], moves: [], mutes: [...(part.mutes || [])] });
   const toLocal = (wall) => performance.now() + wall - Date.now();
   const toWall = (local) => Date.now() + local - performance.now();
 
@@ -235,9 +256,10 @@ const Sync = (() => {
 
     return {
       // The moment to start, or null if nothing else needs to know.
-      announcePlay(bpm) {
+      // waitMs puts off the start, such as for a count-in.
+      announcePlay(bpm, waitMs = 0) {
         if (!active()) return null;
-        const at = performance.now() + START_DELAY_MS;
+        const at = performance.now() + START_DELAY_MS + Math.max(0, waitMs);
         post({ type: "play", bpm, at: toWall(at) });
         return at;
       },
@@ -291,7 +313,7 @@ const Sync = (() => {
     };
   }
 
-  return { aligned, assetSlots, connect, songCue, songMove, songNextBar, songPart, songStart };
+  return { aligned, assetSlots, connect, songCue, songMove, songNextBar, songPart, songSilenced, songStart };
 })();
 
 if (typeof module !== "undefined") module.exports = Sync;

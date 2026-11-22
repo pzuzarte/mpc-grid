@@ -117,7 +117,7 @@ test("each page gets its own part of a song, checked", () => {
     },
   };
   const part = Sync.songPart(plan, "S-1 Grid");
-  assert.deepEqual(part, { bars: 16, loop: true, cues: [{ bar: 0, pattern: 0 }, { bar: 8, pattern: 2 }, { bar: 12, pattern: null }], loops: [] });
+  assert.deepEqual(part, { name: "S-1 Grid", bars: 16, loop: true, cues: [{ bar: 0, pattern: 0 }, { bar: 8, pattern: 2 }, { bar: 12, pattern: null }], loops: [], mutes: [] });
   assert.equal(Sync.songPart(plan, "Protein Grid"), null);
   assert.equal(Sync.songPart({ bars: 0, parts: {} }, "S-1 Grid"), null);
   assert.equal(Sync.songPart(null, "S-1 Grid"), null);
@@ -143,7 +143,7 @@ test("a song sent before play reaches the other pages first", async () => {
   conductor.link.announcePlay(120);
   await until(() => order.length >= 2);
   assert.deepEqual(order, ["song", "play"]);
-  assert.deepEqual(parts[0], { bars: 4, loop: false, cues: [{ bar: 0, pattern: 3 }], loops: [] });
+  assert.deepEqual(parts[0], { name: "S-1 Grid", bars: 4, loop: false, cues: [{ bar: 0, pattern: 3 }], loops: [], mutes: [] });
 });
 
 // Plays a part bar by bar, returning the song bars heard, or "end" when it ends.
@@ -274,4 +274,20 @@ test("a page asks another a question, and hears its answer or that it can't", as
   await assert.rejects(conductor.ask("Bass Station Grid", "fetch"), /library folder isn't open/);
   await assert.rejects(conductor.ask("Bass Station Grid", "toString"), /can't answer that/);
   await assert.rejects(conductor.ask("TD-3 Grid", "catalog", null, 200), /didn't answer/);
+});
+
+test("cues carry a tempo, transpose and preset when they're valid, and mutes come and go", () => {
+  const plan = { bars: 4, mutes: ["Protein Grid", 7], parts: { "S-1 Grid": [
+    { bar: 0, pattern: 0, bpm: 140, transpose: -5, program: 12 },
+    { bar: 2, pattern: 1, bpm: 900, transpose: 40, program: 128 },
+  ] } };
+  const part = Sync.songStart(Sync.songPart(plan, "S-1 Grid"));
+  assert.deepEqual(part.cues, [{ bar: 0, pattern: 0, bpm: 140, transpose: -5, program: 12 }, { bar: 2, pattern: 1 }]);
+  assert.deepEqual(part.mutes, ["Protein Grid"]);
+  assert.equal(Sync.songSilenced(part), false);
+  part.moves.push(Sync.songMove({ atBar: 1, mutes: ["S-1 Grid"] }, 4), Sync.songMove({ atBar: 2, mutes: [] }, 4));
+  Sync.songNextBar(part);
+  assert.equal(Sync.songSilenced(part), true);
+  Sync.songNextBar(part);
+  assert.equal(Sync.songSilenced(part), false);
 });
