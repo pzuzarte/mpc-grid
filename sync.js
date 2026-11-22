@@ -120,10 +120,15 @@ const Sync = (() => {
 
      It can also send a grid the assets kept with a song, to put back. loadAssets(assets)
      puts them in, and gives what it did, or a promise of it, as { ok, message }, which
-     reaches Song Grid's assetsLoaded(name, result). */
+     reaches Song Grid's assetsLoaded(name, result).
+
+     Any page can also ask another a question by name with ask(to, kind, payload), which
+     gives a promise of its answer. The page asked answers with answers[kind](payload),
+     which gives the answer or a promise of it. Song Grid asks a grid for its "catalog",
+     what it can offer a song, and to "fetch" the ones picked from it. */
   function connect({
     name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {}, songMoved = () => {},
-    assets = null, assetsReceived = () => {}, loadAssets = null, assetsLoaded = () => {},
+    assets = null, assetsReceived = () => {}, loadAssets = null, assetsLoaded = () => {}, answers = {},
   }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
     try {
@@ -158,6 +163,9 @@ const Sync = (() => {
       report();
     });
 
+    // Questions sent with ask() that haven't been answered yet, by request id.
+    const asking = new Map();
+
     let stopHeartbeat = () => {};
     let leave = null;
     if (channel) {
@@ -190,6 +198,18 @@ const Sync = (() => {
             if (active()) post({ type: "assets-loaded", request: data.request, ok: Boolean(result?.ok), message: String(result?.message || "") });
           };
           Promise.resolve().then(() => loadAssets(data.assets)).then(reply, () => reply({ ok: false, message: "Couldn't put them in." }));
+        } else if (data.type === "ask" && data.to === name && typeof data.kind === "string") {
+          const handler = Object.prototype.hasOwnProperty.call(answers, data.kind) ? answers[data.kind] : null;
+          const reply = (ok, value, error) => { if (active()) post({ type: "answer", request: data.request, ok, value, error }); };
+          if (!handler) reply(false, null, "It can't answer that. Hard-refresh it to load the latest version.");
+          else Promise.resolve().then(() => handler(data.payload)).then((value) => reply(true, value), (error) => reply(false, null, String(error?.message || error)));
+        } else if (data.type === "answer" && asking.has(data.request)) {
+          const waiting = asking.get(data.request);
+          if (waiting.to !== data.from) return;
+          asking.delete(data.request);
+          clearTimeout(waiting.timer);
+          if (data.ok) waiting.resolve(data.value);
+          else waiting.reject(new Error(typeof data.error === "string" ? data.error : "It couldn't answer."));
         } else if (data.type === "assets-loaded") {
           assetsLoaded(data.from, { ok: Boolean(data.ok), message: typeof data.message === "string" ? data.message.slice(0, 300) : "" }, data.request);
         } else if (data.type === "stop") {
@@ -231,6 +251,20 @@ const Sync = (() => {
         const request = `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         post({ type: "assets-request", request });
         return request;
+      },
+      // Asks one page a question. Gives a promise of its answer, which fails if it doesn't
+      // answer within waitMs, or Sync is off.
+      ask(to, kind, payload = null, waitMs = 5000) {
+        if (!active()) return Promise.reject(new Error("Sync is off."));
+        const request = `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            asking.delete(request);
+            reject(new Error(`${to} didn't answer. Hard-refresh it to load the latest version, then try again.`));
+          }, waitMs);
+          asking.set(request, { to, resolve, reject, timer });
+          post({ type: "ask", to, kind, request, payload });
+        });
       },
       // Sends one grid a song's assets to put back. Returns the request's id, or null.
       sendAssets(to, assets) {

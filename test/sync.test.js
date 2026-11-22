@@ -258,3 +258,20 @@ test("patterns for numbered slots are checked before they're put in", () => {
   assert.deepEqual(slots, [{ index: 1, data: { bars: 1, notes: [] } }, { index: 5, data: { bars: 2, notes: [{ note: 60 }] } }]);
   assert.deepEqual(Sync.assetSlots(null), []);
 });
+
+test("a page asks another a question, and hears its answer or that it can't", async () => {
+  const box = () => ({ checked: true, addEventListener() {} });
+  const conductor = Sync.connect({ name: "Song Grid", checkbox: box(), storageKey: "ask-song", start: () => true, stop() {}, tempo() {}, status() {} });
+  const grid = Sync.connect({
+    name: "Bass Station Grid", checkbox: box(), storageKey: "ask-grid", start: () => true, stop() {}, tempo() {}, status() {},
+    answers: {
+      catalog: async (payload) => ({ sounds: [{ id: "lib:Warm", label: "Warm" }], asked: payload }),
+      fetch: () => { throw new Error("The library folder isn't open."); },
+    },
+  });
+  opened.push(conductor, grid);
+  assert.deepEqual(await conductor.ask("Bass Station Grid", "catalog", { all: true }), { sounds: [{ id: "lib:Warm", label: "Warm" }], asked: { all: true } });
+  await assert.rejects(conductor.ask("Bass Station Grid", "fetch"), /library folder isn't open/);
+  await assert.rejects(conductor.ask("Bass Station Grid", "toString"), /can't answer that/);
+  await assert.rejects(conductor.ask("TD-3 Grid", "catalog", null, 200), /didn't answer/);
+});
