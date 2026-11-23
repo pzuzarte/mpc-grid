@@ -3,8 +3,9 @@
 
    The card can't mount while the MPC is in MIDI mode, so projects are worked on
    from a library in the browser's private storage and copied to the card when
-   it's available. Originals are never changed: saves always create a new project,
-   and everything written is read back and checked.
+   it's available. Save to new project leaves originals alone. Save to card
+   replaces only the card project's .xpj, after backing up the previous one in
+   this browser. Everything written is read back and checked.
 */
 const Backend = (() => {
   const XpjLib = typeof Xpj !== "undefined" ? Xpj : require("./xpj.js");
@@ -305,6 +306,44 @@ const Backend = (() => {
       return { path: `library:${newStem}`, name: newStem };
     }
 
+    /* Saves edits into the same project on the card, keeping its name. The card's
+       previous version is backed up in this browser first, the new file is read
+       back and checked, and the library copy is updated to match. Samples aren't
+       touched. */
+    async function saveToCard({ path, edits }) {
+      const { place, stem } = splitPath(path);
+      if (place !== "library") throw new XpjLib.XpjError("Only library projects can be saved.");
+      const cardDir = await cardProjects();
+      if (!cardDir) {
+        throw new XpjLib.XpjError("No card found. Put the MPC in SD Card Access mode and connect the card.");
+      }
+      const cardFile = await childFile(cardDir, xpjName(stem));
+      if (!cardFile) throw new XpjLib.XpjError(`There's no project called "${stem}" on the card. Use Copy to card instead.`);
+      if (await differsFromLibrary(cardDir, stem)) {
+        throw new XpjLib.XpjError(`${stem} on the card has changed since it was opened here. Open it again from the card, then save.`);
+      }
+      const oldBytes = await readBytes(cardFile);
+      const project = await XpjLib.parse(oldBytes);
+      XpjLib.applyEdits(project, edits || []);
+      const bytes = await XpjLib.serialise(project);
+      await XpjLib.parse(bytes);
+
+      const backupDir = await backups();
+      await writeBytes(backupDir, xpjName(`${stem}-${Date.now()}`), oldBytes);
+      await pruneBackups(backupDir, stem);
+
+      const handle = await writeBytes(cardDir, xpjName(stem), bytes);
+      if (!sameBytes(await readBytes(handle), bytes)) {
+        await writeBytes(cardDir, xpjName(stem), oldBytes);
+        throw new XpjLib.XpjError("Read-back check failed, so the card's project was put back as it was.");
+      }
+      await removeIfPresent(cardDir, `._${xpjName(stem)}`);
+      await writeBytes(library, xpjName(stem), bytes);
+      changeCache.delete(stem);
+      await kv.remove(`draft:${stem}`);
+      return { path: `library:${stem}`, name: stem };
+    }
+
     async function copyToCard({ path }) {
       const { place, stem } = splitPath(path);
       if (place !== "library") throw new XpjLib.XpjError("Only library projects can be copied.");
@@ -332,6 +371,7 @@ const Backend = (() => {
       open,
       save,
       copyToCard,
+      saveToCard,
       readDraft,
       writeDraft,
     };

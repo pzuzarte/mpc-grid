@@ -146,6 +146,7 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .slot.has-pattern { color: var(--text); background: var(--filled); border-color: rgb(var(--on)); }
 .slot[aria-current="true"] { color: var(--accent-text); background: var(--accent); border-color: var(--strong); font-weight: 700; }
 .slot.queued { border: 2px dashed var(--strong); }
+.slot.drop-target { border: 2px solid var(--accent); background: var(--filled); }
 .slot.changed::after,
 .bank.has-notes::after {
   content: "";

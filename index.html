@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611231237">
+<link rel="stylesheet" href="style.css?v=202611231247">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if (localStorage.getItem("mpc-grid-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -179,6 +179,7 @@
     <input id="save-name" type="text" maxlength="64" spellcheck="false">
   </label>
   <button id="save" type="button">Save to new project</button>
+  <button id="save-card" class="primary" type="button" hidden>Save to card</button>
   <button id="to-card" type="button">Copy to card</button>
   <button id="discard" type="button">Discard changes</button>
 </footer>
@@ -213,7 +214,7 @@
     <button id="help-close" type="button">Close</button>
   </div>
   <div class="help-body" tabindex="0">
-    <p>A step grid for the Akai MPC Sample. It plays the MPC live over USB and saves patterns into new copies of your projects. It doesn't change the MPC's firmware or your original projects, and your files aren't uploaded anywhere. It needs a current Chrome or Edge on a computer.</p>
+    <p>A step grid for the Akai MPC Sample. It plays the MPC live over USB and saves patterns into new copies of your projects, or back into the same project on the card if you choose. It doesn't change the MPC's firmware, and your files aren't uploaded anywhere. It needs a current Chrome or Edge on a computer.</p>
     <p>Visits to this page are counted anonymously with <a href="https://www.goatcounter.com/" target="_blank" rel="noopener">GoatCounter</a>, which uses no cookies. It never receives your projects, samples or patterns.</p>
 
     <h3>Set up your MPC Sample</h3>
@@ -244,6 +245,8 @@
     </ol>
 
     <h3>Save patterns to the MPC</h3>
+    <p><b>Straight onto the card:</b> in SD mode, open the project from <b>On the card</b>, edit it, and click <b>Save to [project] on card</b>. This replaces that project's file on the card under the same name, so there's no new project to name. Its samples aren't touched, and the previous version is kept as a backup in this browser. Then eject the card and load the project on the MPC.</p>
+    <p><b>As a new project</b>, leaving the original alone:</p>
     <ol>
       <li>Click <b>Save to new project</b>. This creates a new copy in this browser and leaves the original alone.</li>
       <li>Enter SD mode, then click <b>Copy to card</b>. It never overwrites a project already on the card.</li>
@@ -285,7 +288,7 @@
       <tbody>
         <tr><th scope="row">Project</th><td>Choose a project. "No project" gives you blank pads for live playing, but those patterns can't be saved into a project.</td></tr>
         <tr><th scope="row">Connect card</th><td>Choose the card folder. The badge beside it shows whether the card is available.</td></tr>
-        <tr><th scope="row">Sequence 1-16</th><td>Switch patterns, or click an empty slot to start one. During playback, the new slot starts when the current loop ends.</td></tr>
+        <tr><th scope="row">Sequence 1-16</th><td>Switch patterns, or click an empty slot to start one. Drag a pattern onto an empty slot to copy it there. During playback, the new slot starts when the current loop ends.</td></tr>
         <tr><th scope="row">Play</th><td>Play the pattern on the MPC, looping. Don't press play on the MPC as well.</td></tr>
         <tr><th scope="row">Panic</th><td>Stops playback and silences any notes still sounding on the MPC.</td></tr>
         <tr><th scope="row">Record into MPC</th><td>Records this track's notes into a sequence on the MPC. Clicking it shows the steps to get the MPC ready. Then the page waits, and when you start recording on the MPC, it plays the loop once in time with the MPC's clock. It needs MIDI Sync Out on MIDI Clock on the MPC. This hasn't been confirmed on the hardware yet.</td></tr>
@@ -322,11 +325,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611231237"></script>
-<script src="backend.js?v=202611231237"></script>
-<script src="sync.js?v=202611231237"></script>
-<script src="recorder.js?v=202611231237"></script>
-<script src="app.js?v=202611231237"></script>
+<script src="xpj.js?v=202611231247"></script>
+<script src="backend.js?v=202611231247"></script>
+<script src="sync.js?v=202611231247"></script>
+<script src="recorder.js?v=202611231247"></script>
+<script src="app.js?v=202611231247"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {

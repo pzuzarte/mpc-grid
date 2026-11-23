@@ -154,6 +154,8 @@ async function connectCard() {
 async function refreshProjects() {
   const listing = await backend.projects();
   state.cardMounted = listing.cardMounted;
+  // The card disappears in MIDI mode, so what was last seen there is kept.
+  if (listing.cardMounted) state.onCard = listing.card.some((e) => e.name === state.projectName);
   renderCardState(listing);
   await syncFromCard(listing.card);
   const select = $("project");
@@ -222,13 +224,14 @@ async function openProject(path) {
     }
     setStatus("Opening project...");
     const opened = await backend.open({ path });
+    state.onCard = path.startsWith("card:");
     state.path = opened.path;
     state.projectName = opened.name;
     await loadView(opened.view);
     rememberProject();
     await refreshProjects();
     const restored = state.dirty.size ? " Restored your unsaved patterns." : "";
-    setStatus(`Opened ${opened.name}. The original project is not changed.${restored}`);
+    setStatus(`Opened ${opened.name}. Nothing changes on the card until you save.${restored}`);
   } catch (error) {
     $("project").value = state.path;
     setStatus(error.message, true);
@@ -304,9 +307,8 @@ function hasChanges() {
     : savableKeys().length > 0;
 }
 
-async function saveCopy() {
-  const keys = savableKeys();
-  const edits = keys.map((key) => {
+function editsFor(keys) {
+  return keys.map((key) => {
     const seq = sequenceByKey(key);
     const edit = {
       sequence: key,
@@ -317,29 +319,57 @@ async function saveCopy() {
     if (seq.isNew) edit.create = true;
     return edit;
   });
+}
+
+// After a save, the open patterns match the saved file.
+function markSaved(saved, keys) {
+  state.path = saved.path;
+  state.projectName = saved.name;
+  rememberProject();
+  for (const key of keys) {
+    const seq = sequenceByKey(key);
+    seq.isNew = false;
+    // The saved file now has these notes at their new times.
+    for (const note of notesOf(seq)) delete note.sourceTime;
+  }
+  state.view.sequences = state.view.sequences.filter((s) => !s.isNew);
+  if (!sequence()) state.currentKey = state.view.sequences[0].key;
+  state.dirty = new Set();
+  state.undo = [];
+  state.redo = [];
+  $("save-name").value = nextSaveName(saved.name);
+}
+
+async function saveCopy() {
+  const keys = savableKeys();
   try {
     await flushDraft();
     const saved = await backend.save({
-      path: state.path, name: $("save-name").value, edits,
+      path: state.path, name: $("save-name").value, edits: editsFor(keys),
     });
-    state.path = saved.path;
-    state.projectName = saved.name;
-    rememberProject();
-    for (const key of keys) {
-      const seq = sequenceByKey(key);
-      seq.isNew = false;
-      // The saved file now has these notes at their new times.
-      for (const note of notesOf(seq)) delete note.sourceTime;
-    }
-    state.view.sequences = state.view.sequences.filter((s) => !s.isNew);
-    if (!sequence()) state.currentKey = state.view.sequences[0].key;
-    state.dirty = new Set();
-    state.undo = [];
-    state.redo = [];
-    $("save-name").value = nextSaveName(saved.name);
+    markSaved(saved, keys);
+    state.onCard = false; // A new project isn't on the card until it's copied there.
     await refreshProjects();
     renderAll();
     setStatus(`Saved ${keys.length} sequence(s) to ${saved.name} in this browser. Use Copy to card to keep it on the MPC.`);
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+// Writes the changes straight into the project on the card, under its own name.
+async function saveToCard() {
+  const keys = savableKeys();
+  if (!window.confirm(`Save your changes into ${state.projectName} on the card? This replaces the project file on the card. The previous version is kept as a backup in this browser.`)) return;
+  try {
+    stop();
+    await flushDraft();
+    setStatus("Saving to the card...");
+    const saved = await backend.saveToCard({ path: state.path, edits: editsFor(keys) });
+    markSaved(saved, keys);
+    await refreshProjects();
+    renderAll();
+    setStatus(`Saved ${keys.length} sequence(s) into ${saved.name} on the card. Eject the card before leaving SD Card Access mode, then load the project on the MPC.`);
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -388,6 +418,14 @@ function updateFileButtons() {
   $("save").disabled = !hasProject || !changed || state.view.canSave === false;
   $("save-name").disabled = !hasProject;
   $("to-card").disabled = !hasProject || !state.cardMounted || changed;
+  const onCard = hasProject && Boolean(state.onCard);
+  $("save-card").hidden = !onCard;
+  $("save-card").disabled = !onCard || !state.cardMounted || !changed || state.view.canSave === false;
+  if (onCard) {
+    $("save-card").textContent = `Save to ${state.projectName} on card`;
+    $("save-card").title = state.cardMounted ? "Replace this project on the card with your changes"
+      : "Enter SD Card Access mode on the MPC to save to the card";
+  }
   $("discard").disabled = !hasChanges();
 }
 
@@ -409,6 +447,30 @@ function renderSlots() {
     button.setAttribute("aria-label",
       `Sequence ${key + 1}${used ? `, ${notesOf(seq).length} notes` : ", empty"}`);
     button.addEventListener("click", () => selectSlot(key));
+    // Drag a pattern onto an empty slot to copy it there.
+    button.draggable = Boolean(used);
+    button.addEventListener("dragstart", (event) => {
+      event.dataTransfer.setData("application/x-mpc-sequence", String(key));
+      event.dataTransfer.effectAllowed = "copy";
+    });
+    button.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer.types.includes("application/x-mpc-sequence")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = isEmptySlot(key) ? "copy" : "none";
+      button.classList.toggle("drop-target", isEmptySlot(key));
+    });
+    button.addEventListener("dragleave", () => button.classList.remove("drop-target"));
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      button.classList.remove("drop-target");
+      const from = Number(event.dataTransfer.getData("application/x-mpc-sequence"));
+      if (!Number.isInteger(from) || from === key) return;
+      if (!isEmptySlot(key)) {
+        setStatus(`Sequence ${key + 1} already has a pattern. Drop onto an empty slot, or clear it first.`, true);
+        return;
+      }
+      copySequence(from, key);
+    });
     nodes.push(button);
   }
   $("slots").replaceChildren(...nodes);
@@ -866,6 +928,14 @@ function duplicateSequence() {
     setStatus("All 16 sequences have patterns. Clear one first.", true);
     return;
   }
+  copySequence(source.key, target);
+}
+
+const isEmptySlot = (key) => !sequenceByKey(key) || !notesOf(sequenceByKey(key)).length;
+
+// Copies one sequence's pattern into an empty slot, and shows the copy.
+function copySequence(sourceKey, target) {
+  const source = sequenceByKey(sourceKey);
   stop();
   state.undo = [];
   state.redo = [];
@@ -882,7 +952,7 @@ function duplicateSequence() {
   state.currentKey = target;
   renderAll();
   scheduleDraft();
-  setStatus(`Copied to sequence ${target + 1}.`);
+  setStatus(`Copied sequence ${sourceKey + 1} to sequence ${target + 1}.`);
 }
 
 function setBars(bars) {
@@ -1838,6 +1908,7 @@ function bindControls() {
   });
   $("card").addEventListener("click", connectCard);
   $("save").addEventListener("click", saveCopy);
+  $("save-card").addEventListener("click", saveToCard);
   $("to-card").addEventListener("click", copyToCard);
   $("discard").addEventListener("click", discardChanges);
 

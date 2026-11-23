@@ -222,3 +222,41 @@ test("unknown project paths are refused", async () => {
 test("sample project helper parses", async () => {
   assert.ok((await makeProject()).lossless);
 });
+
+test("saving to the card replaces the card project in place and backs up the old one", async () => {
+  await backend.setCard(cardRoot);
+  const opened = await backend.open({ path: "card:song" });
+  const notes = [{ time: 0, note: 36, velocity: 1, length: 60, probability: 100 }];
+  const saved = await backend.saveToCard({
+    path: opened.path, edits: [{ sequence: 0, track: "Drum 001", notes }],
+  });
+  assert.equal(saved.path, "library:song");
+  const onCard = await read(card, "song.xpj");
+  assert.deepEqual(Xpj.view(await Xpj.parse(onCard)).sequences[0].notes["Drum 001"], notes);
+  assert.deepEqual(await read(library, "song.xpj"), onCard);
+  const backupDir = await library.getDirectoryHandle("backups");
+  const backup = (await names(backupDir)).find((n) => /^song-\d+\.xpj$/.test(n));
+  assert.deepEqual(await read(backupDir, backup), original);
+  // Samples on the card are left alone, and no second project appears.
+  assert.deepEqual(await names(await card.getDirectoryHandle("song_[ProjectData]")), ["._kick.wav", "kick.wav"]);
+  assert.deepEqual((await backend.projects()).card.map((p) => [p.name, p.changed]), [["song", false]]);
+});
+
+test("saving to the card refuses when the card project changed or is missing", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  const changed = await gzip(projectText().replace('"sampleName": ""', '"sampleName": "New Snare"'));
+  await write(card, "song.xpj", changed);
+  await assert.rejects(backend.saveToCard({ path, edits: [] }), /changed since/);
+  assert.deepEqual(await read(card, "song.xpj"), changed);
+  await card.removeEntry("song.xpj");
+  await assert.rejects(backend.saveToCard({ path, edits: [] }), /no project called/);
+});
+
+test("a bad edit leaves the card project as it was", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  const edits = [{ sequence: 0, track: "Drum 001", notes: [{ time: -1, note: 36, velocity: 1, length: 1 }] }];
+  await assert.rejects(backend.saveToCard({ path, edits }), Xpj.XpjError);
+  assert.deepEqual(await read(card, "song.xpj"), original);
+});
