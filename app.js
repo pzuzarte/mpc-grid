@@ -1348,6 +1348,19 @@ function setUpRecorder() {
   }, { storageKey: "mpc-grid-record-input", button: $("record"), input: $("record-input"), channel: $("record-channel") });
 }
 
+// Repeat hits sit back to back, so each note ends well before the next hit
+// on the same pad. Otherwise its note-off can land on, or just after, the
+// next note-on, and a recording MPC drops the repeat.
+function heldPulses(seq, note) {
+  let gap = seq.lengthPulses;
+  for (const other of notesOf(seq)) {
+    if (other.note !== note.note || other === note) continue;
+    const ahead = ((other.time - note.time) % seq.lengthPulses + seq.lengthPulses) % seq.lengthPulses;
+    if (ahead > 0 && ahead < gap) gap = ahead;
+  }
+  return Math.max(1, Math.min(note.length, gap * 0.5));
+}
+
 function sendNote(note, velocity, atTime, lengthMs) {
   if (!state.output) return;
   const value = Math.max(1, Math.min(127, Math.round(velocity * 127)));
@@ -1470,7 +1483,7 @@ function schedule() {
       if (note.time >= from && note.time < to && !state.muted.has(note.note)
           && Math.random() * 100 < (note.probability ?? 100)) {
         sendNote(note.note, note.velocity,
-          state.nextTime + (note.time - from) * ms, note.length * ms);
+          state.nextTime + (note.time - from) * ms, heldPulses(seq, note) * ms);
       }
     }
     state.nextTime += CHUNK_PULSES * ms;
@@ -1670,7 +1683,7 @@ function followMpcClock(event) {
   for (const note of notesOf(seq)) {
     if (note.time >= from && note.time < to && !state.muted.has(note.note)
         && Math.random() * 100 < (note.probability ?? 100)) {
-      sendNote(note.note, note.velocity, now + (note.time - from) * ms, Math.max(1, note.length * ms));
+      sendNote(note.note, note.velocity, now + (note.time - from) * ms, Math.max(1, heldPulses(seq, note) * ms));
     }
   }
   intoMpc.pulse = to;

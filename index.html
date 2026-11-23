@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611231032">
+<link rel="stylesheet" href="style.css?v=202611231233">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if (localStorage.getItem("mpc-grid-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -194,6 +194,7 @@
       <li>Press <kbd>SHIFT</kbd> + <kbd>PAD 8</kbd> for MIDI Configuration. Check <b>MIDI Port</b> is USB, <b>MIDI In Channel</b> is All and <b>Pad MIDI In</b> is On. Set <b>MIDI Sync Out</b> to <b>MIDI Clock</b>, so the MPC tells this page when it starts and how fast it's going, and set <b>MIDI Sync In</b> to Off.</li>
       <li>Choose an <b>empty sequence</b> on the MPC, and set its length to <b><span id="send-bars">the same number of bars</span></b>, the same as here. The MPC adds to what's already in a sequence, so an empty one keeps the notes from doubling up. The MPC's own tempo is used.</li>
       <li>If the MPC counts in before recording, turn its count-in off, so the loop lines up with the start of the sequence.</li>
+      <li>If the MPC's timing correct (quantise) is on, turn it off, or set it at least as fine as the repeats here. Otherwise it pulls the hits of a repeat onto the same step, and they're lost.</li>
       <li>Click <b>Wait for MPC</b> below.</li>
       <li>On the MPC, press <kbd>REC</kbd>, then <kbd>PLAY</kbd>. The page plays the loop once as the MPC records, then stops sending.</li>
       <li>When the status says it's done, press <kbd>STOP</kbd> on the MPC. Play the sequence back to check it, and save the project on the MPC to keep it.</li>
@@ -321,11 +322,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611231032"></script>
-<script src="backend.js?v=202611231032"></script>
-<script src="sync.js?v=202611231032"></script>
-<script src="recorder.js?v=202611231032"></script>
-<script src="app.js?v=202611231032"></script>
+<script src="xpj.js?v=202611231233"></script>
+<script src="backend.js?v=202611231233"></script>
+<script src="sync.js?v=202611231233"></script>
+<script src="recorder.js?v=202611231233"></script>
+<script src="app.js?v=202611231233"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {
