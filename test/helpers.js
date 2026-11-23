@@ -91,6 +91,8 @@ class FakeDir {
 
   async* entries() { yield* [...this.children.entries()]; }
 
+  async isSameEntry(other) { return other === this; }
+
   async queryPermission() { return this.permission; }
 
   async requestPermission() { this.permission = "granted"; return "granted"; }

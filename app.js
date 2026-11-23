@@ -136,6 +136,49 @@ function renderCardState(listing) {
   pill.className = `pill ${kind}`;
 }
 
+function renderLibraryState(info) {
+  const views = {
+    browser: ["Choose library folder", "Library: in this browser", "warn",
+      "Projects are kept privately in this browser. Choose a folder to keep them as files on this computer."],
+    permission: ["Allow library access", `Library: ${info.name} needs permission`, "warn",
+      "The browser needs your permission again to use the library folder."],
+    ready: ["Change library folder", `Library: ${info.name}`, "ok", "Projects are kept as files in this folder."],
+  };
+  const [button, text, kind, title] = views[info.status];
+  $("library").textContent = button;
+  $("library").dataset.status = info.status;
+  $("library-state").textContent = text;
+  $("library-state").className = `pill ${kind}`;
+  $("library-state").title = title;
+  state.libraryName = info.status === "ready" ? info.name : "";
+}
+
+// Where saved projects go, for messages.
+const libraryPlace = () => (state.libraryName ? `your library (${state.libraryName})` : "this browser");
+
+async function chooseLibrary() {
+  try {
+    if ($("library").dataset.status === "permission") {
+      await backend.requestLibraryPermission();
+      await refreshProjects();
+      if (isBlank() && lastProject() && [...$("project").options].some((o) => o.value === lastProject())) {
+        await openProject(lastProject());
+      }
+      return;
+    }
+    const folder = await window.showDirectoryPicker({ id: "mpc-library", mode: "readwrite", startIn: "documents" });
+    setStatus("Setting up the library folder...");
+    const { copied, skipped } = await backend.setLibraryFolder(folder);
+    await refreshProjects();
+    const parts = [`Your library is now the ${folder.name} folder.`];
+    if (copied.length) parts.push(`Copied ${copied.length} project(s) into it.`);
+    if (skipped.length) parts.push(`Left out ${skipped.join(", ")}, as the folder already has a project with that name.`);
+    setStatus(parts.join(" "));
+  } catch (error) {
+    if (error.name !== "AbortError") setStatus(`Couldn't use that folder: ${error.message}`, true);
+  }
+}
+
 async function connectCard() {
   try {
     if ($("card").dataset.status === "permission") {
@@ -153,6 +196,7 @@ async function connectCard() {
 
 async function refreshProjects() {
   const listing = await backend.projects();
+  if (listing.libraryFolder) renderLibraryState(listing.libraryFolder);
   state.cardMounted = listing.cardMounted;
   // The card disappears in MIDI mode, so what was last seen there is kept.
   if (listing.cardMounted) state.onCard = listing.card.some((e) => e.name === state.projectName);
@@ -161,7 +205,7 @@ async function refreshProjects() {
   const select = $("project");
   updateFileButtons();
   // Only rebuild when the list changes, so an open menu isn't disturbed.
-  const signature = JSON.stringify([listing.library, listing.card, state.path]);
+  const signature = JSON.stringify([listing.library, listing.card, state.path, state.libraryName]);
   if (signature === state.projectsSignature) return;
   state.projectsSignature = signature;
   select.replaceChildren(new Option("No project (blank pads)", BLANK_PATH));
@@ -172,7 +216,7 @@ async function refreshProjects() {
     for (const entry of entries) group.append(new Option(entry.name, entry.path));
     select.append(group);
   };
-  addGroup("In this browser", listing.library);
+  addGroup(state.libraryName ? `In ${state.libraryName}` : "In this browser", listing.library);
   addGroup("On the card", listing.card);
   select.value = state.path;
   updateFileButtons();
@@ -351,7 +395,7 @@ async function saveCopy() {
     state.onCard = false; // A new project isn't on the card until it's copied there.
     await refreshProjects();
     renderAll();
-    setStatus(`Saved ${keys.length} sequence(s) to ${saved.name} in this browser. Use Copy to card to keep it on the MPC.`);
+    setStatus(`Saved ${keys.length} sequence(s) to ${saved.name} in ${libraryPlace()}. Use Copy to card to keep it on the MPC.`);
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -360,7 +404,7 @@ async function saveCopy() {
 // Writes the changes straight into the project on the card, under its own name.
 async function saveToCard() {
   const keys = savableKeys();
-  if (!window.confirm(`Save your changes into ${state.projectName} on the card? This replaces the project file on the card. The previous version is kept as a backup in this browser.`)) return;
+  if (!window.confirm(`Save your changes into ${state.projectName} on the card? This replaces the project file on the card. The previous version is kept as a backup in ${libraryPlace()}.`)) return;
   try {
     stop();
     await flushDraft();
@@ -1917,6 +1961,7 @@ function bindControls() {
     if (event.target === $("help")) $("help").close();
   });
   $("card").addEventListener("click", connectCard);
+  $("library").addEventListener("click", chooseLibrary);
   $("save").addEventListener("click", saveCopy);
   $("save-card").addEventListener("click", saveToCard);
   $("to-card").addEventListener("click", copyToCard);
@@ -1976,6 +2021,7 @@ async function start() {
   const missing = missingBrowserFeatures();
   if (missing.length) {
     $("card").disabled = true;
+    $("library").disabled = true;
     $("card-state").textContent = "Needs Chrome or Edge";
     $("card-state").className = "pill warn";
     state.view = blankView();
@@ -1992,6 +2038,9 @@ async function start() {
     ? "No project open: restored your unsaved patterns."
     : NO_PROJECT_MESSAGE);
   await refreshProjects();
+  if ($("library").dataset.status === "permission") {
+    setStatus("Click Allow library access at the top to open your projects again.");
+  }
   const last = lastProject();
   if (last && [...$("project").options].some((o) => o.value === last)) {
     await openProject(last);

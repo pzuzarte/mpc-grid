@@ -2,8 +2,9 @@
 /* Project storage, using the browser's file APIs. Nothing leaves this computer.
 
    The card can't mount while the MPC is in MIDI mode, so projects are worked on
-   from a library in the browser's private storage and copied to the card when
-   it's available. Save to new project leaves originals alone. Save to card
+   from a library and copied to the card when it's available. The library is a
+   folder the user chooses on the computer, or the browser's private storage
+   until one is chosen. Save to new project leaves originals alone. Save to card
    replaces only the card project's .xpj, after backing up the previous one in
    this browser. Everything written is read back and checked.
 */
@@ -13,6 +14,7 @@ const Backend = (() => {
   const BACKUPS_KEPT = 3;
   const INCOMING_SUFFIX = ".incoming";
   const CARD_KEY = "card-folder";
+  const LIBRARY_KEY = "library-folder";
 
   const isMissing = (error) => error.name === "NotFoundError";
 
@@ -140,8 +142,13 @@ const Backend = (() => {
     return null;
   }
 
-  /* library: a directory handle. kv: {get, set, remove} async storage. */
-  function createBackend({ library, kv }) {
+  /* library: a directory handle, used until a library folder is chosen.
+     kv: {get, set, remove} async storage. */
+  function createBackend({ library: browserLibrary, kv }) {
+    let library = browserLibrary;
+    // A folder on the computer, once one is chosen. Browsers ask again for
+    // access on later visits, so it may be waiting for permission.
+    let libraryFolder = null;
     let cardRoot = null;
     // Reading every card project on each check is wasteful, so results are kept
     // until a file's size or date changes.
@@ -151,6 +158,67 @@ const Backend = (() => {
 
     async function loadCard() {
       cardRoot = (await kv.get(CARD_KEY)) || null;
+      libraryFolder = (await kv.get(LIBRARY_KEY)) || null;
+      if (libraryFolder) library = libraryFolder;
+    }
+
+    async function libraryPermission() {
+      if (!libraryFolder) return "granted";
+      return libraryFolder.queryPermission({ mode: "readwrite" });
+    }
+
+    async function libraryReady() {
+      return (await libraryPermission()) === "granted";
+    }
+
+    async function ensureLibrary() {
+      if (!(await libraryReady())) {
+        throw new XpjLib.XpjError("Allow access to your library folder first, with the button at the top.");
+      }
+    }
+
+    async function requestLibraryPermission() {
+      return libraryFolder.requestPermission({ mode: "readwrite" });
+    }
+
+    async function libraryInfo() {
+      if (!libraryFolder) return { status: "browser", name: "" };
+      return { status: (await libraryReady()) ? "ready" : "permission", name: libraryFolder.name };
+    }
+
+    /* Makes a folder on the computer the library. Projects and backups already
+       in the current library are copied into it, skipping any whose name is
+       taken there. The old copies are left where they were. */
+    async function setLibraryFolder(folder) {
+      if (cardRoot && await folder.isSameEntry(cardRoot)) {
+        throw new XpjLib.XpjError("That's the card folder. Choose a folder on the computer for the library.");
+      }
+      const copied = [];
+      const skipped = [];
+      if (await libraryReady() && !(await folder.isSameEntry(library))) {
+        for (const stem of await projectStems(library)) {
+          try {
+            await writeNewProject(library, stem, await readBytes(await library.getFileHandle(xpjName(stem))), folder, stem);
+            copied.push(stem);
+          } catch (error) {
+            if (!(error instanceof XpjLib.XpjError)) throw error;
+            skipped.push(stem);
+          }
+        }
+        const oldBackups = await childDir(library, BACKUPS_DIR);
+        if (oldBackups) {
+          const newBackups = await folder.getDirectoryHandle(BACKUPS_DIR, { create: true });
+          for (const stem of await projectStems(oldBackups)) {
+            if (await exists(newBackups, xpjName(stem))) continue;
+            await writeNewProject(oldBackups, stem, await readBytes(await oldBackups.getFileHandle(xpjName(stem))), newBackups, stem);
+          }
+        }
+      }
+      library = folder;
+      libraryFolder = folder;
+      await kv.set(LIBRARY_KEY, folder);
+      changeCache.clear();
+      return { copied, skipped };
     }
 
     async function setCard(handle) {
@@ -180,6 +248,7 @@ const Backend = (() => {
     }
 
     async function differsFromLibrary(cardDir, stem) {
+      if (!(await libraryReady())) return false;
       const local = await childFile(library, xpjName(stem));
       if (!local) return false;
       const handle = await cardDir.getFileHandle(xpjName(stem));
@@ -194,7 +263,7 @@ const Backend = (() => {
     }
 
     async function projects() {
-      const local = await projectStems(library);
+      const local = (await libraryReady()) ? await projectStems(library) : [];
       const cardDir = await cardProjects();
       let card = [];
       if (cardDir) {
@@ -216,6 +285,7 @@ const Backend = (() => {
           : (await cardPermission()) !== "granted" ? "permission"
             : cardDir ? "ready" : "missing",
         cardName: cardRoot ? cardRoot.name : "",
+        libraryFolder: await libraryInfo(),
       };
     }
 
@@ -268,6 +338,7 @@ const Backend = (() => {
     }
 
     async function open({ path }) {
+      await ensureLibrary();
       const { place, stem } = splitPath(path);
       let updated = false;
       if (place === "card") {
@@ -292,6 +363,7 @@ const Backend = (() => {
     }
 
     async function save({ path, name, edits }) {
+      await ensureLibrary();
       const { place, stem } = splitPath(path);
       if (place !== "library") throw new XpjLib.XpjError("Only library projects can be saved.");
       const newStem = XpjLib.cleanName(name);
@@ -311,6 +383,7 @@ const Backend = (() => {
        back and checked, and the library copy is updated to match. Samples aren't
        touched. */
     async function saveToCard({ path, edits }) {
+      await ensureLibrary();
       const { place, stem } = splitPath(path);
       if (place !== "library") throw new XpjLib.XpjError("Only library projects can be saved.");
       const cardDir = await cardProjects();
@@ -345,6 +418,7 @@ const Backend = (() => {
     }
 
     async function copyToCard({ path }) {
+      await ensureLibrary();
       const { place, stem } = splitPath(path);
       if (place !== "library") throw new XpjLib.XpjError("Only library projects can be copied.");
       const cardDir = await cardProjects();
@@ -366,6 +440,8 @@ const Backend = (() => {
     return {
       loadCard,
       setCard,
+      setLibraryFolder,
+      requestLibraryPermission,
       requestCardPermission,
       projects,
       open,

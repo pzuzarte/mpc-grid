@@ -260,3 +260,45 @@ test("a bad edit leaves the card project as it was", async () => {
   await assert.rejects(backend.saveToCard({ path, edits }), Xpj.XpjError);
   assert.deepEqual(await read(card, "song.xpj"), original);
 });
+
+test("choosing a library folder copies the projects across and is used from then on", async () => {
+  await backend.setCard(cardRoot);
+  await backend.open({ path: "card:song" });
+  const folder = new FakeDir("MPC Library");
+  folder.permission = "granted";
+  await write(folder, "other.xpj", original);
+  const result = await backend.setLibraryFolder(folder);
+  assert.deepEqual(result, { copied: ["song"], skipped: [] });
+  assert.deepEqual(await read(folder, "song.xpj"), original);
+  assert.deepEqual(await names(await folder.getDirectoryHandle("song_[ProjectData]")), ["kick.wav"]);
+  const listing = await backend.projects();
+  assert.deepEqual(listing.library.map((p) => p.name), ["other", "song"]);
+  assert.deepEqual(listing.libraryFolder, { status: "ready", name: "MPC Library" });
+
+  const saved = await backend.save({ path: "library:song", name: "song-v2", edits: [] });
+  assert.equal(saved.path, "library:song-v2");
+  assert.ok((await names(folder)).includes("song-v2.xpj"));
+  assert.ok(!(await names(library)).includes("song-v2.xpj"));
+});
+
+test("a library folder waiting for permission hides its projects until allowed", async () => {
+  const folder = new FakeDir("MPC Library");
+  folder.permission = "granted";
+  await backend.setLibraryFolder(folder);
+  await write(folder, "song.xpj", original);
+  const later = Backend.createBackend({ library: new FakeDir("browser"), kv });
+  await later.loadCard();
+  folder.permission = "prompt";
+  const listing = await later.projects();
+  assert.deepEqual(listing.library, []);
+  assert.equal(listing.libraryFolder.status, "permission");
+  await assert.rejects(later.open({ path: "library:song" }), /library folder/);
+  await later.requestLibraryPermission();
+  assert.deepEqual((await later.projects()).library.map((p) => p.name), ["song"]);
+});
+
+test("the card can't be the library folder", async () => {
+  await backend.setCard(cardRoot);
+  cardRoot.permission = "granted";
+  await assert.rejects(backend.setLibraryFolder(cardRoot), /card folder/);
+});

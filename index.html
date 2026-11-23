@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611231249">
+<link rel="stylesheet" href="style.css?v=202611231404">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if (localStorage.getItem("mpc-grid-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -21,6 +21,8 @@
   <label>Project
     <select id="project"></select>
   </label>
+  <button id="library" type="button">Choose library folder</button>
+  <span id="library-state" class="pill">Library: in this browser</span>
   <button id="card" type="button">Connect card</button>
   <span id="card-state" class="pill">Card: not connected</span>
   <div class="spacer"></div>
@@ -232,7 +234,10 @@
       <li><b>MIDI mode</b> (normal use): the grid can play the MPC, but it can't reach the card.</li>
       <li><b>SD mode</b> (SD Card Access in the MPC's Project menu, <kbd>SHIFT</kbd> + <kbd>PAD 16</kbd>): the grid can reach the card, but it can't play the MPC.</li>
     </ul>
-    <p>Once a project is open, it's kept in this browser, so you can edit and play it in MIDI mode. You only need SD mode to move projects.</p>
+    <p>Once a project is open, it's kept in your library, so you can edit and play it in MIDI mode. You only need SD mode to move projects.</p>
+    <h3>Your library folder</h3>
+    <p>Click <b>Choose library folder</b> and pick or make a folder on this computer, such as <code>Documents/MPC Library</code>. Projects you open from the card, the new projects you save, and backups (in a <code>backups</code> folder) are kept there as normal MPC project files, so you can see them, back them up and copy them. Projects already kept in this browser are copied into it. Until you choose a folder, the library is kept privately in this browser.</p>
+    <p>On later visits the browser may ask again: click <b>Allow library access</b>. Each computer has its own library folder. Choose a folder on the computer, not the card.</p>
     <p><b>Before leaving SD mode:</b> eject the card on your computer, then press <kbd>B1</kbd> on the MPC.</p>
 
     <h3>Open a project from the MPC</h3>
@@ -245,15 +250,15 @@
     </ol>
 
     <h3>Save patterns to the MPC</h3>
-    <p><b>Straight onto the card:</b> in SD mode, open the project from <b>On the card</b>, edit it, and click <b>Save to [project] on card</b>. This replaces that project's file on the card under the same name, so there's no new project to name. Its samples aren't touched, and the previous version is kept as a backup in this browser. Then eject the card and load the project on the MPC.</p>
+    <p><b>Straight onto the card:</b> in SD mode, open the project from <b>On the card</b>, edit it, and click <b>Save to [project] on card</b>. This replaces that project's file on the card under the same name, so there's no new project to name. Its samples aren't touched, and the previous version is kept as a backup in your library. Then eject the card and load the project on the MPC.</p>
     <p><b>As a new project</b>, leaving the original alone:</p>
     <ol>
-      <li>Click <b>Save to new project</b>. This creates a new copy in this browser and leaves the original alone.</li>
+      <li>Click <b>Save to new project</b>. This creates a new copy in your library and leaves the original alone.</li>
       <li>Enter SD mode, then click <b>Copy to card</b>. It never overwrites a project already on the card.</li>
       <li>Eject the card, press <kbd>B1</kbd>, and load the new project on the MPC. Sequence slots 1-16 match pads 1-16 in the MPC's Sequence Mode.</li>
     </ol>
     <p><b>Unsaved patterns</b> are autosaved in this browser, and the yellow message shows they aren't in a project yet. <b>Discard changes</b> removes them.</p>
-    <p class="help-warning"><b>Keep your work on the card.</b> Clearing this browser's data for the site erases its projects and unsaved patterns, and they don't appear in other browsers.</p>
+    <p class="help-warning"><b>Unsaved patterns stay in this browser.</b> Clearing this browser's data for the site erases them, and also the library if you haven't chosen a library folder. Save your work into a project to keep it.</p>
 
     <h3>New samples on the MPC</h3>
     <p>Sample names come from the saved project, because MIDI doesn't carry them. After loading samples, save the project to the card and enter SD mode. If that project is open here, its pad names update within a few seconds, your unsaved patterns are kept, and the previous copy is kept as a backup.</p>
@@ -325,11 +330,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611231249"></script>
-<script src="backend.js?v=202611231249"></script>
-<script src="sync.js?v=202611231249"></script>
-<script src="recorder.js?v=202611231249"></script>
-<script src="app.js?v=202611231249"></script>
+<script src="xpj.js?v=202611231404"></script>
+<script src="backend.js?v=202611231404"></script>
+<script src="sync.js?v=202611231404"></script>
+<script src="recorder.js?v=202611231404"></script>
+<script src="app.js?v=202611231404"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {
