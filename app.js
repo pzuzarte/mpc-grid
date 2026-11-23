@@ -58,7 +58,6 @@ const state = {
   cardMounted: false,
   syncing: false,
   projectsSignature: "",
-  sendOnce: false,
   newLength: "off",
   barsQueued: false,
   lengthDrag: null,
@@ -1282,7 +1281,12 @@ function refreshOutputs() {
     if (outputs[0]) $("output").value = "";
   }
   // Every input is heard, for recording from any keyboard or the MPC's own pads.
-  for (const port of state.midi.inputs.values()) port.onmidimessage = (event) => recorder.message(event, port);
+  for (const port of state.midi.inputs.values()) {
+    port.onmidimessage = (event) => {
+      if (followMpcClock(event)) return;
+      recorder.message(event, port);
+    };
+  }
   recorder.refresh(state.midi);
 }
 
@@ -1322,7 +1326,7 @@ function setUpRecorder() {
     fixedLength: (time) => (state.newLength === "off" ? null : newNoteLength(time)),
     resolution: () => state.resolution,
     length: () => sequence().lengthPulses,
-    playing: () => state.playing && !state.sendOnce,
+    playing: () => state.playing,
     pulseAt,
     startStep: () => 0,
     moveCursor: moveRecordCursor,
@@ -1461,7 +1465,7 @@ function schedule() {
     if (sendingClock() && from % CLOCK_PULSES === 0 && state.output) {
       state.output.send([0xF8], state.nextTime);
     }
-    if (from % PPQ === 0 && !state.sendOnce) click.at(state.nextTime, from % (4 * PPQ) === 0);
+    if (from % PPQ === 0) click.at(state.nextTime, from % (4 * PPQ) === 0);
     for (const note of song?.muted ? [] : notesOf(seq)) {
       if (note.time >= from && note.time < to && !state.muted.has(note.note)
           && Math.random() * 100 < (note.probability ?? 100)) {
@@ -1472,17 +1476,13 @@ function schedule() {
     state.nextTime += CHUNK_PULSES * ms;
     if (song) song.pulse += CHUNK_PULSES;
     state.nextPulse = to >= seq.lengthPulses ? 0 : to;
-    if (state.nextPulse === 0 && state.sendOnce) {
-      finishSendOnce();
-      return;
-    }
     if (state.nextPulse === 0 && state.queuedKey !== null && !song) {
       switchTo(state.queuedKey);
     }
   }
 }
 
-const sendingClock = () => $("clock").checked || state.sendOnce;
+const sendingClock = () => $("clock").checked;
 
 function renderPeers(names) {
   const pill = $("sync-peers");
@@ -1561,7 +1561,7 @@ const link = Sync.connect({
   checkbox: $("sync"),
   storageKey: "mpc-grid-sync",
   start({ bpm, at }) {
-    if (state.sendOnce) return false;
+    if (intoMpc) return false; // Recording into the MPC follows its clock instead.
     if (state.playing) stop({ fromLink: true });
     $("bpm").value = bpm;
     // Song Grid sends this page its part just before it starts playback.
@@ -1604,7 +1604,7 @@ function play({ startAt = null, fromLink = false } = {}) {
   }
   state.playing = true;
   state.nextPulse = 0;
-  const shared = fromLink || state.sendOnce ? null : link.announcePlay(currentBpm());
+  const shared = fromLink ? null : link.announcePlay(currentBpm());
   state.nextTime = startAt ?? shared ?? performance.now() + 60;
   if (sendingClock()) state.output.send([0xFA], state.nextTime);
   $("play").textContent = "Stop";
@@ -1613,8 +1613,79 @@ function play({ startAt = null, fromLink = false } = {}) {
   requestAnimationFrame(drawPlayhead);
 }
 
-// Shows how to get the MPC ready to record, before playing the loop once into it.
+/* Recording into the MPC: the MPC starts recording on its own, so the page waits for it.
+   With MIDI Sync Out on MIDI Clock, the MPC sends start, then 24 clocks a beat. The page
+   plays the loop once from the first clock, following the MPC's clock so the tempo always
+   matches, then stops sending, so the MPC's next time round doesn't double the notes. */
+let intoMpc = null; // While waiting or playing: { started, pulse, last, interval, key }.
+
+function armIntoMpc() {
+  if (!state.output) {
+    setStatus("No MIDI output connected. Exit SD Card Access mode on the MPC.", true);
+    return;
+  }
+  if (state.playing) stop();
+  intoMpc = { started: false, pulse: 0, last: null, interval: 60000 / (currentBpm() * 24), key: state.currentKey };
+  renderIntoMpc();
+  setStatus("Waiting for the MPC. Press REC, then PLAY on the MPC, and the loop plays once in time with it.");
+}
+
+function cancelIntoMpc(message) {
+  intoMpc = null;
+  renderIntoMpc();
+  if (message) setStatus(message);
+}
+
+function renderIntoMpc() {
+  $("send").textContent = intoMpc ? "Stop waiting" : "Record into MPC";
+  $("send").setAttribute("aria-pressed", String(Boolean(intoMpc)));
+}
+
+// Handles the MPC's start, clock and stop while recording into it. Returns whether the
+// message was used.
+function followMpcClock(event) {
+  if (!intoMpc) return false;
+  const status = event.data[0];
+  if (status === 0xFA) {
+    Object.assign(intoMpc, { started: true, pulse: 0, last: null });
+    setStatus("The MPC started. Playing the loop into it...");
+    return true;
+  }
+  if (status === 0xFC) {
+    if (intoMpc.started) cancelIntoMpc("The MPC stopped before the loop finished, so only part of it went in. Undo the take on the MPC, and try again.");
+    return true;
+  }
+  if (status !== 0xF8 || !intoMpc.started) return status === 0xF8;
+  const now = event.timeStamp || performance.now();
+  if (intoMpc.last !== null) {
+    const gap = now - intoMpc.last;
+    // Follows tempo changes, while smoothing out uneven arrival times.
+    if (gap > 2 && gap < 200) intoMpc.interval = intoMpc.interval * 0.7 + gap * 0.3;
+  }
+  intoMpc.last = now;
+  const seq = sequenceByKey(intoMpc.key);
+  const from = intoMpc.pulse;
+  const to = from + CLOCK_PULSES;
+  const ms = intoMpc.interval / CLOCK_PULSES;
+  for (const note of notesOf(seq)) {
+    if (note.time >= from && note.time < to && !state.muted.has(note.note)
+        && Math.random() * 100 < (note.probability ?? 100)) {
+      sendNote(note.note, note.velocity, now + (note.time - from) * ms, Math.max(1, note.length * ms));
+    }
+  }
+  intoMpc.pulse = to;
+  if (to >= seq.lengthPulses) {
+    cancelIntoMpc("Played the loop once into the MPC. Press STOP on the MPC, play the sequence back to check it, and save the project on the MPC to keep it.");
+  }
+  return true;
+}
+
+// Shows how to get the MPC ready to record, before waiting for it to start.
 function openSendDialog() {
+  if (intoMpc) {
+    cancelIntoMpc("Stopped waiting for the MPC.");
+    return;
+  }
   if (!trackNotes().length) {
     setStatus("This track has no notes to record into the MPC.", true);
     return;
@@ -1623,42 +1694,17 @@ function openSendDialog() {
   const bars = seq.lengthPulses / pulsesPerBar(seq);
   $("send-what").textContent = `this track's ${trackNotes().length === 1 ? "note" : `${trackNotes().length} notes`}`;
   $("send-bars").textContent = `${bars} ${bars === 1 ? "bar" : "bars"}`;
-  $("send-bpm").textContent = `${currentBpm()} BPM`;
   $("send-dialog").showModal();
   $("send-start").focus();
 }
 
-// Plays the pattern exactly once with MIDI start, clock and stop. The MPC
-// overdubs while recording, so a second pass could double every note.
-function sendToMpc() {
-  if (state.playing) stop();
-  if (!trackNotes().length) {
-    setStatus("This sequence has no notes to send.", true);
-    return;
-  }
-  state.sendOnce = true;
-  state.queuedKey = null;
-  play();
-  if (state.playing) setStatus("Playing the loop once into the MPC...");
-  else state.sendOnce = false;
-}
-
-function finishSendOnce() {
-  state.output.send([0xFC], state.nextTime);
-  state.sendOnce = false;
-  state.playing = false;
-  $("play").textContent = "Play";
-  $("playhead").hidden = true;
-  setStatus("Played the loop once. If the MPC is still running, press STOP on it, then play the sequence back to check it, and save the project on the MPC to keep it.");
-}
 
 function stop({ fromLink = false } = {}) {
   state.queuedKey = null;
   if (!state.playing) return;
-  if (!fromLink && !state.sendOnce) link.announceStop();
+  if (!fromLink) link.announceStop();
   if (sendingClock() && state.output) state.output.send([0xFC]);
   state.playing = false;
-  state.sendOnce = false;
   $("play").textContent = "Play";
   $("playhead").hidden = true;
   renderSlots();
@@ -1746,7 +1792,7 @@ function bindControls() {
   for (const id of ["send-cancel", "send-cancel-top"]) $(id).addEventListener("click", () => $("send-dialog").close());
   $("send-start").addEventListener("click", () => {
     $("send-dialog").close();
-    sendToMpc();
+    armIntoMpc();
   });
   $("undo").addEventListener("click", undo);
   $("redo").addEventListener("click", redo);
