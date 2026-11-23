@@ -447,16 +447,16 @@ function renderSlots() {
     button.setAttribute("aria-label",
       `Sequence ${key + 1}${used ? `, ${notesOf(seq).length} notes` : ", empty"}`);
     button.addEventListener("click", () => selectSlot(key));
-    // Drag a pattern onto an empty slot to copy it there.
+    // Drag a pattern onto an empty slot to move it there.
     button.draggable = Boolean(used);
     button.addEventListener("dragstart", (event) => {
       event.dataTransfer.setData("application/x-mpc-sequence", String(key));
-      event.dataTransfer.effectAllowed = "copy";
+      event.dataTransfer.effectAllowed = "move";
     });
     button.addEventListener("dragover", (event) => {
       if (!event.dataTransfer.types.includes("application/x-mpc-sequence")) return;
       event.preventDefault();
-      event.dataTransfer.dropEffect = isEmptySlot(key) ? "copy" : "none";
+      event.dataTransfer.dropEffect = isEmptySlot(key) ? "move" : "none";
       button.classList.toggle("drop-target", isEmptySlot(key));
     });
     button.addEventListener("dragleave", () => button.classList.remove("drop-target"));
@@ -469,7 +469,7 @@ function renderSlots() {
         setStatus(`Sequence ${key + 1} already has a pattern. Drop onto an empty slot, or clear it first.`, true);
         return;
       }
-      copySequence(from, key);
+      moveSequence(from, key);
     });
     nodes.push(button);
   }
@@ -953,6 +953,16 @@ function copySequence(sourceKey, target) {
   renderAll();
   scheduleDraft();
   setStatus(`Copied sequence ${sourceKey + 1} to sequence ${target + 1}.`);
+}
+
+// Moves a pattern into an empty slot, leaving its old slot empty.
+function moveSequence(sourceKey, target) {
+  copySequence(sourceKey, target);
+  sequenceByKey(sourceKey).notes[track().name] = [];
+  state.dirty.add(sourceKey);
+  renderAll();
+  scheduleDraft();
+  setStatus(`Moved sequence ${sourceKey + 1} to sequence ${target + 1}.`);
 }
 
 function setBars(bars) {
