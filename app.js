@@ -1638,7 +1638,7 @@ function armIntoMpc() {
     return;
   }
   if (state.playing) stop();
-  intoMpc = { started: false, pulse: 0, last: null, interval: 60000 / (currentBpm() * 24), key: state.currentKey };
+  intoMpc = { started: false, pulse: 0, last: null, tick: null, ends: new Map(), interval: 60000 / (currentBpm() * 24), key: state.currentKey };
   renderIntoMpc();
   setStatus("Waiting for the MPC. Press REC, then PLAY on the MPC, and the loop plays once in time with it.");
 }
@@ -1660,7 +1660,7 @@ function followMpcClock(event) {
   if (!intoMpc) return false;
   const status = event.data[0];
   if (status === 0xFA) {
-    Object.assign(intoMpc, { started: true, pulse: 0, last: null });
+    Object.assign(intoMpc, { started: true, pulse: 0, last: null, tick: null, ends: new Map() });
     setStatus("The MPC started. Playing the loop into it...");
     return true;
   }
@@ -1676,6 +1676,10 @@ function followMpcClock(event) {
     if (gap > 2 && gap < 200) intoMpc.interval = intoMpc.interval * 0.7 + gap * 0.3;
   }
   intoMpc.last = now;
+  // Clocks arrive a few ms early or late. Following a smoothed beat instead
+  // keeps closely spaced hits, like 8x repeats, evenly apart and in order.
+  intoMpc.tick = intoMpc.tick === null ? now
+    : (() => { const expected = intoMpc.tick + intoMpc.interval; return expected + (now - expected) * 0.2; })();
   const seq = sequenceByKey(intoMpc.key);
   const from = intoMpc.pulse;
   const to = from + CLOCK_PULSES;
@@ -1683,7 +1687,11 @@ function followMpcClock(event) {
   for (const note of notesOf(seq)) {
     if (note.time >= from && note.time < to && !state.muted.has(note.note)
         && Math.random() * 100 < (note.probability ?? 100)) {
-      sendNote(note.note, note.velocity, now + (note.time - from) * ms, Math.max(1, heldPulses(seq, note) * ms));
+      // Never start a hit before the last one on the same pad has ended.
+      const at = Math.max(intoMpc.tick + (note.time - from) * ms, (intoMpc.ends.get(note.note) ?? 0) + 1);
+      const held = Math.max(1, heldPulses(seq, note) * ms);
+      intoMpc.ends.set(note.note, at + held);
+      sendNote(note.note, note.velocity, at, held);
     }
   }
   intoMpc.pulse = to;
