@@ -393,6 +393,8 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .help-body th, .help-body td { padding: 7px 8px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
 .help-body th { width: 34%; font-weight: 600; }
 .help-body small { color: var(--muted); font-weight: 400; }
+.send-dialog { width: min(560px, calc(100vw - 32px)); height: auto; }
+.send-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .help-warning { padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--panel-2); }
 
 .status { margin: 0; color: var(--muted); }
@@ -412,6 +414,7 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .tool-menu nav a:hover, .tool-menu nav a:focus-visible { background: var(--panel-2); }
 .tool-menu nav a[aria-current="page"] { color: var(--accent); font-weight: 700; }
 .divider { width: 1px; height: 22px; background: var(--line); }
+.button-pair { display: flex; gap: 3px; }
 .tool-menu nav hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
 .tool-menu nav button { height: auto; padding: 7px 10px; color: var(--text); text-align: left; background: none; border: 0; border-radius: 4px; font-size: 13px; }
 .tool-menu nav button:hover { background: var(--panel-2); }

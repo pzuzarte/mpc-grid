@@ -834,6 +834,28 @@ function switchTo(key) {
   scheduleDraft();
 }
 
+// Moves the track's notes one step in time, wrapping around the sequence. A note can't
+// run past the end.
+function shiftInTime(direction) {
+  if (!trackNotes().length) {
+    setStatus("This track has no notes to move.", true);
+    return;
+  }
+  closeNoteEditor({ restoreFocus: false });
+  remember();
+  const by = direction * state.resolution;
+  const length = sequence().lengthPulses;
+  sequence().notes[track().name] = trackNotes()
+    .map((n) => {
+      const time = ((n.time + by) % length + length) % length;
+      return { ...n, time, length: Math.min(n.length, length - time) };
+    })
+    .sort((a, b) => a.time - b.time || a.note - b.note);
+  renderGrid();
+  markDirty();
+  setStatus(`Moved the notes ${direction > 0 ? "later" : "earlier"} by one step. Undo puts them back.`);
+}
+
 function duplicateSequence() {
   const source = sequence();
   let target = null;
@@ -1591,6 +1613,21 @@ function play({ startAt = null, fromLink = false } = {}) {
   requestAnimationFrame(drawPlayhead);
 }
 
+// Shows how to get the MPC ready to record, before playing the loop once into it.
+function openSendDialog() {
+  if (!trackNotes().length) {
+    setStatus("This track has no notes to record into the MPC.", true);
+    return;
+  }
+  const seq = sequence();
+  const bars = seq.lengthPulses / pulsesPerBar(seq);
+  $("send-what").textContent = `this track's ${trackNotes().length === 1 ? "note" : `${trackNotes().length} notes`}`;
+  $("send-bars").textContent = `${bars} ${bars === 1 ? "bar" : "bars"}`;
+  $("send-bpm").textContent = `${currentBpm()} BPM`;
+  $("send-dialog").showModal();
+  $("send-start").focus();
+}
+
 // Plays the pattern exactly once with MIDI start, clock and stop. The MPC
 // overdubs while recording, so a second pass could double every note.
 function sendToMpc() {
@@ -1602,7 +1639,7 @@ function sendToMpc() {
   state.sendOnce = true;
   state.queuedKey = null;
   play();
-  if (state.playing) setStatus("Sending one pass to the MPC...");
+  if (state.playing) setStatus("Playing the loop once into the MPC...");
   else state.sendOnce = false;
 }
 
@@ -1612,7 +1649,7 @@ function finishSendOnce() {
   state.playing = false;
   $("play").textContent = "Play";
   $("playhead").hidden = true;
-  setStatus("Sent one pass. If the MPC was recording, press STOP on it and play it back.");
+  setStatus("Played the loop once. If the MPC is still running, press STOP on it, then play the sequence back to check it, and save the project on the MPC to keep it.");
 }
 
 function stop({ fromLink = false } = {}) {
@@ -1705,13 +1742,20 @@ function bindControls() {
   });
   $("play").addEventListener("click", () => (state.playing ? stop() : play()));
   $("bpm").addEventListener("change", announceTempo);
-  $("send").addEventListener("click", sendToMpc);
+  $("send").addEventListener("click", openSendDialog);
+  for (const id of ["send-cancel", "send-cancel-top"]) $(id).addEventListener("click", () => $("send-dialog").close());
+  $("send-start").addEventListener("click", () => {
+    $("send-dialog").close();
+    sendToMpc();
+  });
   $("undo").addEventListener("click", undo);
   $("redo").addEventListener("click", redo);
   $("stop-all").addEventListener("click", panic);
   $("theme-toggle").addEventListener("click", () => setTheme(document.documentElement.dataset.theme !== "light"));
   setUpRecorder();
   $("duplicate").addEventListener("click", duplicateSequence);
+  $("shift-left").addEventListener("click", () => shiftInTime(-1));
+  $("shift-right").addEventListener("click", () => shiftInTime(1));
   $("clear").addEventListener("click", () => {
     if (!trackNotes().length) return;
     remember();
@@ -1732,7 +1776,7 @@ function bindControls() {
 
   const typing = (target) => /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName);
   window.addEventListener("keydown", (event) => {
-    if ($("help").open) return;
+    if ($("help").open || $("send-dialog").open) return;
     if (event.key === "?" && !typing(event.target)) {
       openHelp();
       return;

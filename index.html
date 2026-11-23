@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611222333">
+<link rel="stylesheet" href="style.css?v=202611230743">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if (localStorage.getItem("mpc-grid-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -72,6 +72,7 @@
     <input id="clock" type="checkbox"> Send clock
   </label>
   <button id="click" class="toggle" type="button" aria-pressed="false" title="A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It plays from this computer, not the instrument.">Click</button>
+  <button id="send" type="button" title="Records this track's notes into a sequence on the MPC, by playing the loop once while the MPC records. Shows how to set the MPC up first.">Record into MPC</button>
   <span class="divider" aria-hidden="true"></span>
   <label>Bars
     <select id="bars"></select>
@@ -113,6 +114,11 @@
     <button id="record" class="toggle" type="button" aria-pressed="false" title="Record notes into this sequence from the chosen input. Press Play to record in time as the pattern loops, or just press pads or keys to add them step by step.">Rec</button>
     <select id="record-input" aria-label="Record from" title="The keyboard, pads or instrument to record from"></select>
     <select id="record-channel" aria-label="Record channel" title="The MIDI channel to record, or any"></select>
+  </div>
+  <span class="divider" aria-hidden="true"></span>
+  <div class="button-pair">
+    <button id="shift-left" type="button" title="Move every note on this track one step earlier, wrapping around" aria-label="Move earlier">Shift &lt;</button>
+    <button id="shift-right" type="button" title="Move every note on this track one step later, wrapping around" aria-label="Move later">Shift &gt;</button>
   </div>
   <span class="divider" aria-hidden="true"></span>
   <div class="field" role="group" aria-label="Live track mix">
@@ -168,7 +174,6 @@
 <footer class="bar foot">
   <p id="status" class="status" role="status" aria-live="polite"></p>
   <div class="spacer"></div>
-  <button id="send" type="button" title="Plays this pattern exactly once, with MIDI start, clock and stop, for the MPC to record">Send to MPC</button>
   <span id="dirty" class="dirty" hidden>Changes kept in this browser, not yet in a project</span>
   <label>Save as
     <input id="save-name" type="text" maxlength="64" spellcheck="false">
@@ -178,6 +183,28 @@
   <button id="discard" type="button">Discard changes</button>
 </footer>
 <p class="hint">Click: add or remove a step. Drag from an empty step: draw a note. Drag a note: change its length. Cmd-drag: fill steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
+<dialog id="send-dialog" class="help send-dialog" aria-labelledby="send-title">
+  <div class="help-head">
+    <h2 id="send-title">Record into MPC</h2>
+    <button id="send-cancel-top" type="button">Cancel</button>
+  </div>
+  <div class="help-body">
+    <p>This page plays <span id="send-what">the loop</span> once, with MIDI start, clock and stop, while the MPC records it into one of its sequences. Get the MPC ready first:</p>
+    <ol>
+      <li>Press <kbd>SHIFT</kbd> + <kbd>PAD 8</kbd> for MIDI Configuration. Check <b>MIDI Port</b> is USB, <b>MIDI In Channel</b> is All, <b>Pad MIDI In</b> is On, and set <b>MIDI Sync In</b> to <b>MIDI Clock</b>, so the MPC starts and stops with this page and follows its tempo.</li>
+      <li>Choose an <b>empty sequence</b> on the MPC, and set its length to <b><span id="send-bars">the same number of bars</span></b>, the same as here. The MPC adds to what's already in a sequence, so an empty one keeps the notes from doubling up.</li>
+      <li>Arm recording: press <kbd>REC</kbd>, then <kbd>PLAY</kbd>. With MIDI Sync In on MIDI Clock, the MPC waits for this page to start it instead of starting on its own. If it counts in first, turn its count-in off, or the first bar may be missed.</li>
+      <li>Click <b>Start</b> below. The loop plays once at <span id="send-bpm">the Live BPM</span>, then stops the MPC.</li>
+      <li>Play the sequence back on the MPC to check it, and save the project there to keep it.</li>
+    </ol>
+    <p class="help-warning">This hasn't been confirmed on an MPC Sample yet. If the MPC doesn't start with this page, or records nothing, check MIDI Sync In, and that the MPC isn't in SD Card Access mode.</p>
+    <div class="send-actions">
+      <button id="send-cancel" type="button">Cancel</button>
+      <button id="send-start" class="primary" type="button">Start</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="help" class="help" aria-labelledby="help-title">
   <div class="help-head">
     <h2 id="help-title">MPC Grid help</h2>
@@ -239,6 +266,7 @@
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
         <tr><th scope="row"><b>Rec</b></th><td>Records notes into this sequence from the input and channel beside it: the MPC's pads, another keyboard, or any input. While playing, hits land on the nearest step and last as long as they're held, or the New note length if it isn't Off, and each time round the loop adds more, then play back on the MPC like any other steps. While stopped, each hit adds a note and moves on a step. Undo takes back the whole take. Notes from another keyboard are passed on to the MPC while recording, so you hear them.</td></tr>
         <tr><th scope="row"><b>Click</b></th><td>A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It comes from this computer's speakers, not the MPC, and stays on or off for next time.</td></tr>
+        <tr><th scope="row"><b>Shift &lt;</b> and <b>Shift &gt;</b></th><td>Move every note on this track, on all pads, one step earlier or later, at the current step size. Notes moved past the end come back in at the start, and the other way round. Undo puts them back.</td></tr>
         <tr><th scope="row">Click a pad name</th><td>Hear that pad on the MPC</td></tr>
         <tr><th scope="row">Click <b>M</b> beside a pad</th><td>Mute it while playing, and click again to unmute. Its steps are kept, and saved projects aren't changed. Mutes last until you reload the page.</td></tr>
         <tr><th scope="row"><kbd>Space</kbd></th><td>Play and stop, unless you're typing in a text box such as a name</td></tr>
@@ -258,7 +286,7 @@
         <tr><th scope="row">Sequence 1-16</th><td>Switch patterns, or click an empty slot to start one. During playback, the new slot starts when the current loop ends.</td></tr>
         <tr><th scope="row">Play</th><td>Play the pattern on the MPC, looping. Don't press play on the MPC as well.</td></tr>
         <tr><th scope="row">Panic</th><td>Stops playback and silences any notes still sounding on the MPC.</td></tr>
-        <tr><th scope="row">Send to MPC</th><td>Experimental. Plays the pattern once, so the MPC can record it while SEQ RECORD is armed on an empty sequence. Set MIDI Sync In to MIDI Clock first. This hasn't been confirmed on the hardware.</td></tr>
+        <tr><th scope="row">Record into MPC</th><td>Records this track's notes into a sequence on the MPC by playing the loop once while the MPC records. Clicking it shows the steps to get the MPC ready, and the loop starts when you click Start. This hasn't been confirmed on the hardware yet.</td></tr>
         <tr><th scope="row">Live BPM</th><td>Playback speed from this page. It isn't saved to the project.</td></tr>
         <tr><th scope="row">Live volume and Live pan</th><td>Move the whole track's volume or pan on the MPC right away, even while it plays. They affect every pad and aren't saved to the project. Double-click Live pan to centre it. Reload the project on the MPC to undo them.</td></tr>
         <tr><th scope="row">Bars</th><td>Length of the current pattern. Shortening it removes notes past the new end, and Undo brings them back.</td></tr>
@@ -292,11 +320,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611222333"></script>
-<script src="backend.js?v=202611222333"></script>
-<script src="sync.js?v=202611222333"></script>
-<script src="recorder.js?v=202611222333"></script>
-<script src="app.js?v=202611222333"></script>
+<script src="xpj.js?v=202611230743"></script>
+<script src="backend.js?v=202611230743"></script>
+<script src="sync.js?v=202611230743"></script>
+<script src="recorder.js?v=202611230743"></script>
+<script src="app.js?v=202611230743"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {
