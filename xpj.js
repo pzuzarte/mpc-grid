@@ -9,6 +9,17 @@
 const Xpj = (() => {
   const HEADER_LINES = 5;
   const NOTE_EVENT = 3;
+  const AUTOMATION_EVENT = 2;
+  /* The pad filter settings the MPC Sample records as automation: cutoff and resonance
+     from 0 to 1, and the filter mode as its type number divided by 29. */
+  const FILTER = { cutoff: 514, resonance: 515, mode: 1082 };
+  const FILTER_PARAMETERS = new Set(Object.values(FILTER));
+  const MODE_SCALE = 29;
+  // The mode knob's eight positions, in order, with the type each stores.
+  const FILTER_MODES = [
+    { name: "Off", type: 0 }, { name: "Classic", type: 29 }, { name: "LPF2", type: 2 }, { name: "LPF4", type: 3 },
+    { name: "HPF2", type: 7 }, { name: "HPF4", type: 8 }, { name: "BPF2", type: 11 }, { name: "BPF4", type: 12 },
+  ];
   const DATA_SUFFIX = "_[ProjectData]";
   const SEQUENCE_SLOTS = 16;
   const MAX_BARS = 64;
@@ -148,8 +159,16 @@ const Xpj = (() => {
         || { beatsPerBar: 4, beatLength: 960 };
       const sequenceClips = clips(sequence);
       const notes = {};
+      const automation = {};
       for (const track of tracks) {
         const clip = sequenceClips[track.name];
+        // The pads' filter movements, as recorded on the MPC or drawn here.
+        automation[track.name] = (clip ? clip.eventList.events : [])
+          .filter((event) => event.type === AUTOMATION_EVENT && event.automation
+            && FILTER_PARAMETERS.has(event.automation.parameter))
+          .map((event) => ({
+            time: event.time, note: event.automation.note, parameter: event.automation.parameter, value: num(event.automation.value),
+          }));
         notes[track.name] = (clip ? clip.eventList.events : [])
           .filter((event) => event.type === NOTE_EVENT)
           .map((event) => ({
@@ -168,6 +187,7 @@ const Xpj = (() => {
         beatsPerBar: signature.beatsPerBar,
         beatLength: signature.beatLength,
         notes,
+        automation,
       };
     });
     sequences.sort((a, b) => a.key - b.key);
@@ -268,6 +288,65 @@ const Xpj = (() => {
     clip.eventList.events = kept;
   }
 
+  function cleanPoint(raw, lengthPulses) {
+    const show = JSON.stringify(raw);
+    if (raw === null || typeof raw !== "object") throw new XpjError(`Bad filter point: ${show}`);
+    const { time, note, parameter, value } = raw;
+    if (!Number.isInteger(time) || time < 0 || time >= lengthPulses) throw new XpjError(`Filter point outside the sequence: ${show}`);
+    if (!Number.isInteger(note) || note < 0 || note > 127) throw new XpjError(`Filter point for a bad pad: ${show}`);
+    if (!FILTER_PARAMETERS.has(parameter)) throw new XpjError(`Not a filter setting: ${show}`);
+    if (typeof value !== "number" || !(value >= 0 && value <= 1)) throw new XpjError(`Filter value out of range: ${show}`);
+    if (parameter === FILTER.mode && !FILTER_MODES.some((mode) => Math.abs(mode.type / MODE_SCALE - value) < 0.001)) {
+      throw new XpjError(`Not one of the MPC's filter modes: ${show}`);
+    }
+    return { time, note, parameter, value };
+  }
+
+  function automationEvent(time, note, parameter, value, invented) {
+    return {
+      version: 2, time, type: AUTOMATION_EVENT, channel: 0, selected: false, muted: false, invented,
+      automation: { note, value: toFloat(value), parameter },
+    };
+  }
+
+  /* Replace one track's filter movements in one sequence. Other automation and the notes
+     are kept. Each pad and setting starts with a point at the sequence's start, which the
+     MPC marks as invented, as it does for the ones it records. */
+  function setAutomation(project, sequenceKey, trackName, points) {
+    const sequence = findSequence(project, sequenceKey);
+    const clip = clips(sequence)[trackName];
+    if (!clip) throw new XpjError(`No track named ${JSON.stringify(trackName)} in this sequence.`);
+    const cleaned = points.map((point) => cleanPoint(point, sequence.value.lengthPulses))
+      .sort((a, b) => a.time - b.time);
+    const isFilter = (event) => event.type === AUTOMATION_EVENT && event.automation
+      && FILTER_PARAMETERS.has(event.automation.parameter);
+    const kept = clip.eventList.events.filter((event) => !isFilter(event));
+    // A point that hasn't changed keeps its event exactly as the MPC wrote it.
+    const before = new Map(clip.eventList.events.filter(isFilter)
+      .map((event) => [`${event.automation.note}:${event.automation.parameter}:${event.time}`, event]));
+    // In the order given, which for a project read here is the MPC's own order.
+    const added = [];
+    const seen = new Set();
+    const started = new Set();
+    for (const point of cleaned) {
+      const key = `${point.note}:${point.parameter}`;
+      if (seen.has(`${key}:${point.time}`)) continue;
+      seen.add(`${key}:${point.time}`);
+      if (!started.has(key) && point.time !== 0) added.push(automationEvent(0, point.note, point.parameter, point.value, true));
+      started.add(key);
+      const same = before.get(`${key}:${point.time}`);
+      added.push(same && num(same.automation.value) === point.value
+        ? same : automationEvent(point.time, point.note, point.parameter, point.value, point.time === 0));
+    }
+    // At the same time, automation goes ahead of notes, as the MPC saves it.
+    clip.eventList.events = [...kept, ...added]
+      .map((event, index) => ({ event, index }))
+      .sort((a, b) => a.event.time - b.event.time
+        || (a.event.type === AUTOMATION_EVENT ? 0 : 1) - (b.event.type === AUTOMATION_EVENT ? 0 : 1)
+        || a.index - b.index)
+      .map(({ event }) => event);
+  }
+
   function pulsesPerBar(value) {
     const signature = value.timeSignatureTrack.timeSignatures[0];
     return signature.beatsPerBar * signature.beatLength;
@@ -336,7 +415,8 @@ const Xpj = (() => {
   }
 
   /* Each edit is {sequence: key, track: name, notes: [...]} and may also have
-     create: true, lengthPulses: n and name: "...". */
+     create: true, lengthPulses: n, name: "..." and automation: [{time, note, parameter, value}],
+     the track's filter movements. */
   function applyEdits(project, edits) {
     for (const edit of edits) {
       if (edit === null || typeof edit !== "object" || !Array.isArray(edit.notes)) {
@@ -347,6 +427,7 @@ const Xpj = (() => {
         setSequenceLength(project, edit.sequence, edit.lengthPulses);
       }
       setNotes(project, edit.sequence, edit.track, edit.notes);
+      if (Array.isArray(edit.automation)) setAutomation(project, edit.sequence, edit.track, edit.automation);
       if (typeof edit.name === "string" && edit.name.trim()) setSequenceName(project, edit.sequence, edit.name);
     }
   }
@@ -362,6 +443,9 @@ const Xpj = (() => {
 
   return {
     DATA_SUFFIX,
+    FILTER,
+    FILTER_MODES,
+    MODE_SCALE,
     SEQUENCE_SLOTS,
     XpjError,
     addSequence,
@@ -371,6 +455,7 @@ const Xpj = (() => {
     findSequence,
     parse,
     serialise,
+    setAutomation,
     setNotes,
     setSequenceLength,
     view,

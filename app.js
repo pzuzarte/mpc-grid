@@ -44,6 +44,8 @@ const state = {
   windowStart: 0,
   windowSpan: 0,
   editor: null,
+  lanes: [], // Pads with a knob lane open under the grid: { note, parameter }.
+  laneDraw: null,
   dirty: new Set(),
   undo: [],
   redo: [],
@@ -400,6 +402,7 @@ function editsFor(keys) {
     };
     if (seq.isNew) edit.create = true;
     if (seq.name) edit.name = seq.name;
+    if (Array.isArray(seq.automation?.[track().name])) edit.automation = seq.automation[track().name];
     return edit;
   });
 }
@@ -777,7 +780,18 @@ function renderGrid() {
     mute.setAttribute("aria-label", `Mute pad ${padId(pad.pad)}`);
     mute.setAttribute("aria-pressed", String(muted));
     mute.addEventListener("click", () => toggleMute(pad));
-    label.append(hear, mute);
+    const open = state.lanes.some((lane) => lane.note === pad.note);
+    const moved = (sequence()?.automation?.[track().name] || []).some((point) => point.note === pad.note);
+    const laneButton = document.createElement("button");
+    laneButton.type = "button";
+    laneButton.className = "lane-button";
+    laneButton.classList.toggle("moved", moved);
+    laneButton.textContent = "~";
+    laneButton.title = `${open ? "Close" : "Open"} ${padId(pad.pad)}'s knob lane under the grid${moved ? ". It has movements." : ""}`;
+    laneButton.setAttribute("aria-label", `Knob lane for pad ${padId(pad.pad)}`);
+    laneButton.setAttribute("aria-pressed", String(open));
+    laneButton.addEventListener("click", () => toggleLane(pad.note));
+    label.append(hear, mute, laneButton);
     nodes.push(label);
 
     for (let step = 0; step < stepCount; step += 1) {
@@ -797,6 +811,208 @@ function renderGrid() {
   grid.replaceChildren(...nodes);
   renderNotes();
   renderStepControls();
+  renderLane();
+}
+
+/* ---------- Drawing filter movements ---------- */
+
+// The MPC records a knob about every 100 ticks. Drawn points are a 1/16 of a beat apart.
+const LANE_TICKS = 60;
+const MODES = Xpj.FILTER_MODES;
+const modeIndex = (value) => {
+  const found = MODES.findIndex((mode) => Math.abs(mode.type / Xpj.MODE_SCALE - value) < 0.001);
+  return found < 0 ? 0 : found;
+};
+const lanePoints = () => sequence()?.automation?.[track().name] || [];
+const PARAM_NAMES = { 514: "Cutoff", 515: "Resonance", 1082: "Filter mode" };
+
+function editablePoints() {
+  const seq = sequence();
+  seq.automation ??= {};
+  seq.automation[track().name] ??= [];
+  return seq.automation[track().name];
+}
+
+// Opens or closes a pad's knob lane, on the knob it was last on, or cutoff.
+function toggleLane(note) {
+  if (state.lanes.some((lane) => lane.note === note)) state.lanes = state.lanes.filter((lane) => lane.note !== note);
+  else state.lanes.push({ note, parameter: state.lastLaneParameter || Xpj.FILTER.cutoff });
+  renderGrid();
+}
+
+const padForNote = (note) => track().pads.find((pad) => pad.note === note) || { pad: note - 36, note, sample: "" };
+
+function renderLane() {
+  const section = $("lane");
+  const rows = $("lane-rows");
+  section.hidden = !state.lanes.length;
+  if (!state.lanes.length) {
+    rows.replaceChildren();
+    return;
+  }
+  const first = document.querySelector(".cell");
+  const last = document.querySelector(".grid > :last-child");
+  if (!first || !last) return;
+  const left = first.getBoundingClientRect().left;
+  const width = last.getBoundingClientRect().right - left;
+  const sideWidth = Math.max(80, left - rows.getBoundingClientRect().left);
+  rows.replaceChildren(...state.lanes.map((lane) => {
+    const pad = padForNote(lane.note);
+    const row = document.createElement("div");
+    row.className = "lane-row";
+    const side = document.createElement("div");
+    side.className = "lane-side";
+    side.style.width = `${sideWidth}px`;
+    const name = Object.assign(document.createElement("span"), { className: "lane-name", textContent: `${padId(pad.pad)} ${pad.sample || `Note ${pad.note}`}` });
+    name.title = name.textContent;
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", `Knob shown for pad ${padId(pad.pad)}`);
+    for (const [param, label] of Object.entries(PARAM_NAMES)) {
+      const moved = lanePoints().some((p) => p.note === lane.note && p.parameter === Number(param));
+      select.append(new Option(`${moved ? "* " : ""}${label}`, param));
+    }
+    select.value = String(lane.parameter);
+    select.addEventListener("change", () => {
+      lane.parameter = Number(select.value);
+      state.lastLaneParameter = lane.parameter;
+      renderLane();
+    });
+    const actions = Object.assign(document.createElement("div"), { className: "lane-actions" });
+    const clear = Object.assign(document.createElement("button"), { type: "button", textContent: "Clear" });
+    clear.title = `Remove ${padId(pad.pad)}'s ${PARAM_NAMES[lane.parameter].toLowerCase()} movements`;
+    clear.addEventListener("click", () => clearLane(lane));
+    const close = Object.assign(document.createElement("button"), { type: "button", textContent: "×" });
+    close.title = "Close this lane";
+    close.setAttribute("aria-label", `Close pad ${padId(pad.pad)}'s lane`);
+    close.addEventListener("click", () => toggleLane(lane.note));
+    actions.append(clear, close);
+    side.append(name, select, actions);
+    const canvas = document.createElement("canvas");
+    canvas.className = "lane-canvas";
+    canvas.dataset.note = String(lane.note);
+    canvas.dataset.parameter = String(lane.parameter);
+    canvas.style.width = `${width}px`;
+    canvas.setAttribute("aria-label", `${PARAM_NAMES[lane.parameter]} for pad ${padId(pad.pad)}`);
+    row.append(side, canvas);
+    return row;
+  }));
+  for (const canvas of rows.querySelectorAll("canvas")) paintLane(canvas, width);
+}
+
+function paintLane(canvas, width) {
+  const note = Number(canvas.dataset.note);
+  const parameter = Number(canvas.dataset.parameter);
+  const scale = window.devicePixelRatio || 1;
+  const height = canvas.clientHeight || 56;
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  const style = getComputedStyle(document.documentElement);
+  ctx.fillStyle = style.getPropertyValue("--cell") || "#333";
+  ctx.fillRect(0, 0, width, height);
+  const span = state.windowSpan || 1;
+  const xAt = (time) => ((time - state.windowStart) / span) * width;
+  ctx.fillStyle = style.getPropertyValue("--line") || "#555";
+  for (let time = state.windowStart; time < state.windowStart + span; time += state.resolution) ctx.fillRect(xAt(time), 0, 1, height);
+  // A knob holds its value until the next point, as the MPC plays it.
+  const points = lanePoints().filter((p) => p.note === note && p.parameter === parameter).sort((a, b) => a.time - b.time);
+  const mode = parameter === Xpj.FILTER.mode;
+  const level = (value) => (mode ? (modeIndex(value) + 1) / MODES.length : value);
+  const accent = style.getPropertyValue("--accent") || "#f80";
+  const text = style.getPropertyValue("--text") || "#fff";
+  ctx.font = "10px sans-serif";
+  const end = sequence().lengthPulses;
+  points.forEach((point, index) => {
+    const until = points[index + 1]?.time ?? end;
+    if (until <= state.windowStart || point.time >= state.windowStart + span) return;
+    const x0 = Math.max(0, xAt(point.time));
+    const x1 = Math.min(width, xAt(until));
+    const bar = level(point.value) * height;
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(x0, height - bar, x1 - x0, bar);
+    ctx.globalAlpha = 1;
+    ctx.fillRect(x0, height - bar, Math.max(1, xAt(point.time + LANE_TICKS) - xAt(point.time)), bar);
+    if (mode && (index === 0 || modeIndex(points[index - 1].value) !== modeIndex(point.value))) {
+      ctx.fillStyle = text;
+      ctx.fillText(MODES[modeIndex(point.value)].name, x0 + 3, 11);
+    }
+  });
+}
+
+// Sets or erases a pad's knob at one point, replacing any point within its 1/16 beat.
+function setLanePoint(note, parameter, time, value, erase) {
+  const points = editablePoints();
+  const kept = points.filter((p) => !(p.note === note && p.parameter === parameter && p.time >= time && p.time < time + LANE_TICKS));
+  if (!erase) kept.push({ time, note, parameter, value });
+  kept.sort((a, b) => a.time - b.time);
+  sequence().automation[track().name] = kept;
+}
+
+function laneStroke(event) {
+  const drag = state.laneDraw;
+  const box = drag.canvas.getBoundingClientRect();
+  const x = Math.max(0, Math.min(box.width - 1, event.clientX - box.left));
+  const y = Math.max(0, Math.min(box.height, event.clientY - box.top));
+  const end = Math.min(state.windowStart + state.windowSpan, sequence().lengthPulses);
+  const raw = state.windowStart + (x / box.width) * state.windowSpan;
+  const time = Math.min(end - LANE_TICKS, Math.floor(raw / LANE_TICKS) * LANE_TICKS);
+  const share = 1 - y / box.height;
+  const mode = drag.parameter === Xpj.FILTER.mode;
+  const value = mode
+    ? MODES[Math.max(0, Math.min(MODES.length - 1, Math.floor(share * MODES.length)))].type / Xpj.MODE_SCALE
+    : Math.round(Math.max(0, Math.min(1, share)) * 127) / 127;
+  // Fills the gap since the last point, as a fast drag skips over some.
+  const from = drag.last ? drag.last.time : time;
+  const startValue = drag.last ? drag.last.value : value;
+  const step = time >= from ? LANE_TICKS : -LANE_TICKS;
+  const count = Math.abs(time - from) / LANE_TICKS;
+  for (let index = 0; index <= count; index += 1) {
+    const between = count ? index / count : 1;
+    const v = mode ? value : Math.round((startValue + (value - startValue) * between) * 127) / 127;
+    setLanePoint(drag.note, drag.parameter, from + index * step, v, drag.erase);
+  }
+  drag.last = { time, value };
+  paintLane(drag.canvas, box.width);
+  const name = PARAM_NAMES[drag.parameter];
+  setStatus(drag.erase ? `Erasing ${name.toLowerCase()}.` : `${name}: ${mode ? MODES[modeIndex(value)].name : Math.round(value * 127)}.`);
+}
+
+function clearLane(lane) {
+  const before = lanePoints().length;
+  const kept = lanePoints().filter((p) => !(p.note === lane.note && p.parameter === lane.parameter));
+  if (kept.length === before) return;
+  remember();
+  editablePoints();
+  sequence().automation[track().name] = kept;
+  markDirty();
+  renderGrid();
+  setStatus(`Cleared ${padId(padForNote(lane.note).pad)}'s ${PARAM_NAMES[lane.parameter].toLowerCase()}. Undo brings it back.`);
+}
+
+function bindLane() {
+  const rows = $("lane-rows");
+  rows.addEventListener("pointerdown", (event) => {
+    const canvas = event.target.closest("canvas");
+    if (!canvas || event.button !== 0) return;
+    remember();
+    state.laneDraw = { canvas, note: Number(canvas.dataset.note), parameter: Number(canvas.dataset.parameter), erase: event.altKey, last: null };
+    canvas.setPointerCapture(event.pointerId);
+    laneStroke(event);
+    event.preventDefault();
+  });
+  rows.addEventListener("pointermove", (event) => {
+    if (state.laneDraw) laneStroke(event);
+  });
+  const finish = () => {
+    if (!state.laneDraw) return;
+    state.laneDraw = null;
+    markDirty();
+    renderGrid();
+  };
+  rows.addEventListener("pointerup", finish);
+  rows.addEventListener("pointercancel", finish);
 }
 
 // Muting goes by note, as that's what plays the pad on the MPC.
@@ -1116,6 +1332,11 @@ function shiftInTime(direction) {
       return { ...n, time, length: Math.min(n.length, length) };
     })
     .sort((a, b) => a.time - b.time || a.note - b.note);
+  const points = sequence().automation?.[track().name];
+  if (points) {
+    sequence().automation[track().name] = points.map((point) => ({ ...point, time: ((point.time + by) % length + length) % length }))
+      .sort((a, b) => a.time - b.time);
+  }
   renderGrid();
   markDirty();
   setStatus(`Moved the notes ${direction > 0 ? "later" : "earlier"} by one step. Undo puts them back.`);
@@ -1163,6 +1384,7 @@ function copySequence(sourceKey, target) {
 function moveSequence(sourceKey, target) {
   copySequence(sourceKey, target);
   sequenceByKey(sourceKey).notes[track().name] = [];
+  if (sequenceByKey(sourceKey).automation) sequenceByKey(sourceKey).automation[track().name] = [];
   state.dirty.add(sourceKey);
   renderAll();
   scheduleDraft();
@@ -1175,6 +1397,7 @@ function setBars(bars) {
   remember();
   seq.lengthPulses = length;
   seq.notes[track().name] = notesOf(seq).filter((n) => n.time < length);
+  if (seq.automation?.[track().name]) seq.automation[track().name] = seq.automation[track().name].filter((point) => point.time < length);
   if (state.nextPulse >= length) state.nextPulse = 0;
   markDirty();
   renderGrid();
@@ -1185,7 +1408,10 @@ function setBars(bars) {
 // A sequence as it is now, for Undo and Redo to bring back.
 function snapshotOf(key) {
   const seq = sequenceByKey(key);
-  return { key, lengthPulses: seq.lengthPulses, notes: JSON.stringify(notesOf(seq)), dirtyBefore: state.dirty.has(key) };
+  return {
+    key, lengthPulses: seq.lengthPulses, notes: JSON.stringify(notesOf(seq)),
+    automation: JSON.stringify(seq.automation?.[track().name] || []), dirtyBefore: state.dirty.has(key),
+  };
 }
 
 function remember() {
@@ -1196,6 +1422,8 @@ function remember() {
 
 function markDirty() {
   state.dirty.add(state.currentKey);
+  // A pad that now plays gets a lane.
+  if (state.lanes.length && !state.laneDraw) renderLane();
   renderChrome();
   scheduleDraft();
 }
@@ -1212,6 +1440,10 @@ function stepHistory(from, to) {
   to.push(snapshotOf(last.key));
   seq.lengthPulses = last.lengthPulses;
   seq.notes[track().name] = JSON.parse(last.notes);
+  if (last.automation) {
+    seq.automation ??= {};
+    seq.automation[track().name] = JSON.parse(last.automation);
+  }
   if (last.dirtyBefore) state.dirty.add(last.key);
   else state.dirty.delete(last.key);
   state.currentKey = last.key;
@@ -2167,6 +2399,7 @@ function bindControls() {
   $("card").addEventListener("click", connectCard);
   $("library").addEventListener("click", chooseLibrary);
   $("project-save").addEventListener("click", saveProject);
+  bindLane();
   $("sequence-name").addEventListener("change", (event) => renameSequence(event.target.value));
   $("grid-title").addEventListener("click", () => {
     const seq = sequence();

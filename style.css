@@ -240,6 +240,10 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
   font-weight: 700;
 }
 .mute[aria-pressed="true"] { background: #e0a526; border-color: #e0a526; color: #1a1a1a; }
+/* Opens the pad's knob lane under the grid. Marked when the pad has movements. */
+.lane-button { flex: none; width: 22px; height: 100%; min-height: 0; padding: 0; background: var(--panel); border-radius: 4px; color: var(--muted); font-size: 12px; }
+.lane-button.moved { color: var(--accent); }
+.lane-button[aria-pressed="true"] { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
 .pad-label.muted .pad { opacity: 0.5; }
 .cell.muted { opacity: 0.35; }
 
@@ -449,3 +453,15 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .grid-title:hover { border-color: var(--line); }
 .grid-title .number { color: var(--muted); font-weight: 400; }
 .grid-title.untitled .name { color: var(--muted); font-weight: 400; font-style: italic; }
+
+/* Knob lanes under the grid, one for each pad opened with its ~ button. */
+.lane { flex: none; padding: 4px 16px 6px; border-top: 1px solid var(--line); }
+.lane-help { margin: 0 0 4px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.lane-rows { display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow-y: auto; }
+.lane-row { display: flex; align-items: stretch; }
+.lane-side { flex: none; display: flex; flex-direction: column; gap: 2px; padding-right: 6px; font-size: 11px; }
+.lane-side .lane-name { overflow: hidden; color: var(--text); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.lane-side select { height: 22px; font-size: 11px; }
+.lane-side .lane-actions { display: flex; gap: 2px; }
+.lane-side button { height: 20px; padding: 0 6px; font-size: 11px; }
+.lane-canvas { display: block; height: 56px; border-radius: 3px; cursor: crosshair; touch-action: none; }

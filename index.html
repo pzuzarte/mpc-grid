@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611240920">
+<link rel="stylesheet" href="style.css?v=202611241249">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if ((localStorage.getItem("midi-grids-theme") || localStorage.getItem("mpc-grid-theme")) === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -158,6 +158,11 @@
   <div id="playhead" class="playhead" hidden></div>
 </main>
 
+<section id="lane" class="lane" aria-label="Knob lanes" hidden>
+  <p class="lane-help">Drag to draw, Alt-drag to erase. A knob holds its value until the next point. The MPC plays these once the project is saved, as it can't follow them over MIDI.</p>
+  <div id="lane-rows" class="lane-rows"></div>
+</section>
+
 <div id="note-editor" class="note-editor" role="dialog" aria-labelledby="editor-title" hidden>
   <h2 id="editor-title"></h2>
   <p id="editor-hits" class="editor-hits" hidden></p>
@@ -282,6 +287,7 @@
         <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
         <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
+        <tr><th scope="row"><b>~</b> beside a pad</th><td>Opens that pad's knob lane under the grid, to draw how a setting moves through the sequence. Click it again, or &times; in the lane, to close it, and open as many pads as you like. Each lane's menu picks what it edits: Cutoff, Resonance or Filter mode (Off, Classic, LPF2, LPF4, HPF2, HPF4, BPF2, BPF4). Drag to draw, Alt-drag to erase, and <b>Clear</b> removes that setting's movements for the pad. A setting holds its value until the next point, as on the MPC. The ~ is coloured on pads that have movements, including ones recorded on the MPC, and * in the menu marks which settings. They're saved into the project with Save or Copy to card, and the MPC plays them from there: it can't follow them over MIDI, so you won't hear them from this page. Undo takes back a stroke, and Shift moves them with the notes.</td></tr>
         <tr><th scope="row"><b>Rec</b></th><td>Records notes into this sequence from the input and channel beside it: the MPC's pads, another keyboard, or any input. While playing, hits land exactly where you play them, or on the nearest step with <b>Snap to steps</b> chosen beside Rec, and last as long as they're held, or the New note length if it isn't Off, and each time round the loop adds more, then play back on the MPC like any other steps. While stopped, each hit adds a note and moves on a step. Undo takes back the whole take. Notes from another keyboard are passed on to the MPC while recording, so you hear them.</td></tr>
         <tr><th scope="row"><b>Click</b></th><td>A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It comes from this computer's speakers, not the MPC, and stays on or off for next time.</td></tr>
         <tr><th scope="row"><b>Shift &lt;</b> and <b>Shift &gt;</b></th><td>Move every note on this track, on all pads, one step earlier or later, at the current step size. Notes moved past the end come back in at the start, and the other way round. Undo puts them back.</td></tr>
@@ -338,11 +344,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611240920"></script>
-<script src="backend.js?v=202611240920"></script>
-<script src="sync.js?v=202611240920"></script>
-<script src="recorder.js?v=202611240920"></script>
-<script src="app.js?v=202611240920"></script>
+<script src="xpj.js?v=202611241249"></script>
+<script src="backend.js?v=202611241249"></script>
+<script src="sync.js?v=202611241249"></script>
+<script src="recorder.js?v=202611241249"></script>
+<script src="app.js?v=202611241249"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {

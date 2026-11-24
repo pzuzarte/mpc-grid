@@ -261,3 +261,36 @@ for (const name of realProjects) {
 test("sample project helper is valid", async () => {
   assert.ok((await projectBytes()).length > 0);
 });
+
+test("filter movements are written as the MPC records them, and read back", async () => {
+  const project = await makeProject();
+  const { FILTER, MODE_SCALE } = Xpj;
+  Xpj.applyEdits(project, [{
+    sequence: 0, track: "Drum 001", notes: [NOTE],
+    automation: [
+      { time: 480, note: 36, parameter: FILTER.cutoff, value: 0.25 },
+      { time: 960, note: 36, parameter: FILTER.mode, value: 3 / MODE_SCALE },
+    ],
+  }]);
+  const automation = eventsOf(project).filter((e) => e.type === 2);
+  // Each setting gets an invented starting point at 0, as the MPC saves them.
+  assert.deepEqual(automation.map((e) => [e.time, e.invented, e.automation.parameter]),
+    [[0, true, FILTER.cutoff], [0, true, FILTER.mode], [480, false, FILTER.cutoff], [960, false, FILTER.mode]]);
+  const again = await Xpj.parse(await Xpj.serialise(project));
+  const points = Xpj.view(again).sequences[0].automation["Drum 001"];
+  assert.equal(points.length, 4);
+  assert.ok(points.some((p) => p.time === 480 && p.value === 0.25));
+});
+
+test("only real filter modes and in-range values are accepted, and other automation is kept", async () => {
+  const project = await makeProject();
+  const other = { version: 2, time: 0, type: 2, channel: 0, selected: false, muted: false, invented: true, automation: { note: 36, value: 0.5, parameter: 9999 } };
+  eventsOf(project).unshift(other);
+  const edit = (point) => () => Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], automation: [point] }]);
+  assert.throws(edit({ time: 0, note: 36, parameter: Xpj.FILTER.mode, value: 0.5 }), /filter modes/);
+  assert.throws(edit({ time: 0, note: 36, parameter: Xpj.FILTER.cutoff, value: 1.5 }), /out of range/);
+  assert.throws(edit({ time: 0, note: 36, parameter: 9999, value: 0.5 }), /Not a filter setting/);
+  edit({ time: 0, note: 36, parameter: Xpj.FILTER.resonance, value: 0.4 })();
+  assert.ok(eventsOf(project).includes(other));
+  assert.equal(Xpj.FILTER_MODES.map((m) => m.name).join(" "), "Off Classic LPF2 LPF4 HPF2 HPF4 BPF2 BPF4");
+});
