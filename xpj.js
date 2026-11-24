@@ -139,7 +139,9 @@ const Xpj = (() => {
         sample = layer.sampleName || layer.name || "";
         if (sample) break;
       }
-      rows.push({ pad, note, sample });
+      // The filter mode the pad plays with, unless a sequence's movements change it.
+      const filterType = num(instrument.synthSection?.filterData?.value0?.filterType);
+      rows.push({ pad, note, sample, filterType: Number.isInteger(filterType) ? filterType : null });
     });
     return rows;
   }
@@ -347,6 +349,18 @@ const Xpj = (() => {
       .map(({ event }) => event);
   }
 
+  // Sets pads' own filter modes, as the MPC's mode knob does outside recording.
+  function setPadFilters(project, trackName, changes) {
+    const track = project.data.tracks.find((item) => item.name === trackName);
+    if (!track) throw new XpjError(`No track named ${JSON.stringify(trackName)}.`);
+    for (const { pad, type } of changes) {
+      if (!FILTER_MODES.some((mode) => mode.type === type)) throw new XpjError(`Not one of the MPC's filter modes: ${type}`);
+      const filter = track.program?.drum?.instruments?.[pad]?.synthSection?.filterData?.value0;
+      if (!filter) throw new XpjError(`Pad ${pad + 1} has no filter settings.`);
+      filter.filterType = type;
+    }
+  }
+
   function pulsesPerBar(value) {
     const signature = value.timeSignatureTrack.timeSignatures[0];
     return signature.beatsPerBar * signature.beatLength;
@@ -428,6 +442,7 @@ const Xpj = (() => {
       }
       setNotes(project, edit.sequence, edit.track, edit.notes);
       if (Array.isArray(edit.automation)) setAutomation(project, edit.sequence, edit.track, edit.automation);
+      if (Array.isArray(edit.padFilters)) setPadFilters(project, edit.track, edit.padFilters);
       if (typeof edit.name === "string" && edit.name.trim()) setSequenceName(project, edit.sequence, edit.name);
     }
   }
@@ -457,6 +472,7 @@ const Xpj = (() => {
     serialise,
     setAutomation,
     setNotes,
+    setPadFilters,
     setSequenceLength,
     view,
   };

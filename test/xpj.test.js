@@ -43,7 +43,7 @@ test("a project that can't be reproduced exactly can be viewed but not saved", a
 test("view lists drum tracks, pads, notes and tempo as plain numbers", async () => {
   const view = Xpj.view(await makeProject());
   assert.deepEqual(view.tracks.map((t) => t.name), ["Drum 001"]);
-  assert.deepEqual(view.tracks[0].pads[0], { pad: 0, note: 36, sample: "Kick" });
+  assert.deepEqual(view.tracks[0].pads[0], { pad: 0, note: 36, sample: "Kick", filterType: null });
   assert.deepEqual(view.sequences[0].notes["Drum 001"], [
     { time: 0, note: 36, velocity: 1, length: 100, probability: 50 },
   ]);
@@ -293,4 +293,15 @@ test("only real filter modes and in-range values are accepted, and other automat
   edit({ time: 0, note: 36, parameter: Xpj.FILTER.resonance, value: 0.4 })();
   assert.ok(eventsOf(project).includes(other));
   assert.equal(Xpj.FILTER_MODES.map((m) => m.name).join(" "), "Off Classic LPF2 LPF4 HPF2 HPF4 BPF2 BPF4");
+});
+
+test("a pad's own filter mode is read and saved", async () => {
+  const project = await makeProject();
+  project.data.tracks[0].program.drum.instruments[0].synthSection = { filterData: { value0: { filterType: 29 } } };
+  const pad = Xpj.view(project).tracks[0].pads[0];
+  assert.equal(pad.filterType, 29);
+  Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], padFilters: [{ pad: pad.pad, type: 8 }] }]);
+  const again = await Xpj.parse(await Xpj.serialise(project));
+  assert.equal(Xpj.view(again).tracks[0].pads[0].filterType, 8);
+  assert.throws(() => Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], padFilters: [{ pad: pad.pad, type: 5 }] }]), /filter modes/);
 });

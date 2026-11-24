@@ -45,6 +45,7 @@ const state = {
   windowSpan: 0,
   editor: null,
   lanes: [], // Pads with a knob lane open under the grid: { note, parameter }.
+  padFilters: {}, // Pads' own filter modes changed here and not saved yet: { track: { pad: type } }.
   laneDraw: null,
   dirty: new Set(),
   undo: [],
@@ -323,6 +324,14 @@ async function loadView(view) {
     state.view.sequences = [...merged.values()].sort((a, b) => a.key - b.key);
     state.dirty = new Set(draft.dirty);
   }
+  // Pad filter modes changed here and not saved yet.
+  state.padFilters = draft?.padFilters && typeof draft.padFilters === "object" ? draft.padFilters : {};
+  for (const item of state.view.tracks || []) {
+    for (const pad of item.pads) {
+      const type = state.padFilters[item.name]?.[pad.pad];
+      if (Number.isInteger(type)) pad.filterType = type;
+    }
+  }
 
   const wanted = sequenceByKey(draft ? draft.currentKey : view.currentSequence);
   state.currentKey = (wanted || state.view.sequences[0]).key;
@@ -403,12 +412,15 @@ function editsFor(keys) {
     if (seq.isNew) edit.create = true;
     if (seq.name) edit.name = seq.name;
     if (Array.isArray(seq.automation?.[track().name])) edit.automation = seq.automation[track().name];
+    const pads = state.padFilters[track().name];
+    if (pads && Object.keys(pads).length) edit.padFilters = Object.entries(pads).map(([pad, type]) => ({ pad: Number(pad), type }));
     return edit;
   });
 }
 
 // After a save, the open patterns match the saved file.
 function markSaved(saved, keys) {
+  state.padFilters = {};
   state.path = saved.path;
   state.projectName = saved.name;
   rememberProject();
@@ -506,6 +518,7 @@ function writeDraft() {
   const keep = hasChanges() || state.dirty.size > 0;
   const draft = keep ? {
     sequences: state.view.sequences,
+    padFilters: state.padFilters,
     dirty: [...state.dirty],
     currentKey: state.currentKey,
   } : null;
@@ -833,6 +846,16 @@ function editablePoints() {
   return seq.automation[track().name];
 }
 
+// Sets a pad's own filter mode. Save keeps it in the project.
+function setPadFilter(pad, type) {
+  if (!MODES.some((item) => item.type === type)) return;
+  pad.filterType = type;
+  state.padFilters[track().name] ??= {};
+  state.padFilters[track().name][pad.pad] = type;
+  markDirty();
+  setStatus(`Pad ${padId(pad.pad)} plays with the ${MODES.find((item) => item.type === type).name} filter. Save or Copy to card keeps it in the project.`);
+}
+
 // Opens or closes a pad's knob lane, on the knob it was last on, or cutoff.
 function toggleLane(note) {
   if (state.lanes.some((lane) => lane.note === note)) state.lanes = state.lanes.filter((lane) => lane.note !== note);
@@ -877,6 +900,15 @@ function renderLane() {
       state.lastLaneParameter = lane.parameter;
       renderLane();
     });
+    // The pad's own filter mode, which it plays with unless the lane's movements change it.
+    const padMode = document.createElement("select");
+    padMode.setAttribute("aria-label", `Filter mode for pad ${padId(pad.pad)}`);
+    padMode.title = "The pad's own filter mode, as the MPC's mode knob sets it. Drawn Filter mode movements change it during the sequence.";
+    if (!Number.isInteger(pad.filterType)) padMode.append(new Option("Mode: unknown", ""));
+    padMode.append(...MODES.map((item) => new Option(`Mode: ${item.name}`, String(item.type))));
+    padMode.value = Number.isInteger(pad.filterType) ? String(pad.filterType) : "";
+    padMode.disabled = isBlank();
+    padMode.addEventListener("change", () => setPadFilter(pad, Number(padMode.value)));
     const actions = Object.assign(document.createElement("div"), { className: "lane-actions" });
     const clear = Object.assign(document.createElement("button"), { type: "button", textContent: "Clear" });
     clear.title = `Remove ${padId(pad.pad)}'s ${PARAM_NAMES[lane.parameter].toLowerCase()} movements`;
@@ -886,7 +918,7 @@ function renderLane() {
     close.setAttribute("aria-label", `Close pad ${padId(pad.pad)}'s lane`);
     close.addEventListener("click", () => toggleLane(lane.note));
     actions.append(clear, close);
-    side.append(name, select, actions);
+    side.append(name, padMode, select, actions);
     const canvas = document.createElement("canvas");
     canvas.className = "lane-canvas";
     canvas.dataset.note = String(lane.note);
