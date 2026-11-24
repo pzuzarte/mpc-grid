@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611240901">
+<link rel="stylesheet" href="style.css?v=202611240920">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if ((localStorage.getItem("midi-grids-theme") || localStorage.getItem("mpc-grid-theme")) === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -59,6 +59,9 @@
 <section class="bar slots-bar" aria-label="Sequences">
   <span class="group-label">Sequence</span>
   <div id="slots" class="slots"></div>
+  <label title="The name of the sequence you're on. Song Grid shows it, and Save keeps it in the project, where the MPC shows it too.">Name
+    <input id="sequence-name" type="text" maxlength="32" spellcheck="false" aria-label="Sequence name">
+  </label>
   <div class="spacer"></div>
   <button id="undo" type="button" title="Undo (Cmd+Z)" disabled>Undo</button>
   <button id="redo" type="button" title="Redo (Cmd+Shift+Z)" disabled>Redo</button>
@@ -140,6 +143,7 @@
   </div>
 </section>
 
+<div class="grid-title-row"><button id="grid-title" class="grid-title" type="button" title="Click to name this pattern"></button></div>
 <div class="grid-nav">
   <nav id="banks" class="banks" aria-label="Pad banks"></nav>
   <div id="pager" class="pager" hidden>
@@ -334,11 +338,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611240901"></script>
-<script src="backend.js?v=202611240901"></script>
-<script src="sync.js?v=202611240901"></script>
-<script src="recorder.js?v=202611240901"></script>
-<script src="app.js?v=202611240901"></script>
+<script src="xpj.js?v=202611240920"></script>
+<script src="backend.js?v=202611240920"></script>
+<script src="sync.js?v=202611240920"></script>
+<script src="recorder.js?v=202611240920"></script>
+<script src="app.js?v=202611240920"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {

@@ -327,8 +327,16 @@ const Xpj = (() => {
     if (descending) sequences.sort((a, b) => b.key - a.key);
   }
 
+  // The name the MPC shows for a sequence, kept short and plain.
+  function setSequenceName(project, key, name) {
+    const { value } = findSequence(project, key);
+    const cleaned = String(name ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 32);
+    if (!cleaned) throw new XpjError("A sequence needs a name.");
+    value.name = cleaned;
+  }
+
   /* Each edit is {sequence: key, track: name, notes: [...]} and may also have
-     create: true and lengthPulses: n. */
+     create: true, lengthPulses: n and name: "...". */
   function applyEdits(project, edits) {
     for (const edit of edits) {
       if (edit === null || typeof edit !== "object" || !Array.isArray(edit.notes)) {
@@ -339,6 +347,7 @@ const Xpj = (() => {
         setSequenceLength(project, edit.sequence, edit.lengthPulses);
       }
       setNotes(project, edit.sequence, edit.track, edit.notes);
+      if (typeof edit.name === "string" && edit.name.trim()) setSequenceName(project, edit.sequence, edit.name);
     }
   }
 

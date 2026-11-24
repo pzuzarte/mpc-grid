@@ -355,3 +355,11 @@ test("Copy to card replaces a project of the same name, backing up the card's an
   assert.ok((await names(backupDir)).filter((n) => /^song-\d+\.xpj$/.test(n)).length >= 1);
   assert.equal(await kv.get("ahead:song"), undefined);
 });
+
+test("a sequence's name is saved into the project", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  await backend.saveInPlace({ path, edits: [{ sequence: 0, track: "Drum 001", notes: [], name: "Verse groove" }] });
+  const view = Xpj.view(await Xpj.parse(await read(library, "song.xpj")));
+  assert.equal(view.sequences[0].name, "Verse groove");
+});

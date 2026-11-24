@@ -351,6 +351,44 @@ function hasChanges() {
     : savableKeys().length > 0;
 }
 
+// Names the sequence you're on. Song Grid shows the name, and Save keeps it in the project.
+function renameSequence(value) {
+  const seq = sequence();
+  const name = String(value || "").trim().slice(0, 32);
+  if (!seq || !name || name === seq.name) {
+    renderSequenceName();
+    return;
+  }
+  seq.name = name;
+  markDirty();
+  renderSlots();
+  setStatus(`Named sequence ${seq.key + 1} "${name}". Save keeps the name in the project.`);
+}
+
+// The name of the pattern on the grid, shown just above it. Clicking it renames it.
+function renderGridTitle(word, number, name) {
+  const title = $("grid-title");
+  if (!title) return;
+  const label = document.createElement("span");
+  label.className = "number";
+  label.textContent = number === "" ? `${word}: ` : `${word} ${number}: `;
+  const shown = document.createElement("span");
+  shown.className = "name";
+  shown.textContent = name || "Untitled";
+  title.replaceChildren(label, shown);
+  title.classList.toggle("untitled", !name);
+  title.title = name ? `Click to rename ${word.toLowerCase()} ${number}` : `Click to name ${word.toLowerCase()} ${number}`;
+}
+
+function renderSequenceName() {
+  const seq = sequence();
+  if (seq) renderGridTitle("Sequence", seq.key + 1, seq.name && seq.name !== `Sequence ${String(seq.key + 1).padStart(2, "0")}` ? seq.name : "");
+  const field = $("sequence-name");
+  if (!field || document.activeElement === field) return;
+  field.value = seq?.name || "";
+  field.placeholder = seq ? `Sequence ${seq.key + 1}` : "";
+}
+
 function editsFor(keys) {
   return keys.map((key) => {
     const seq = sequenceByKey(key);
@@ -361,6 +399,7 @@ function editsFor(keys) {
       lengthPulses: seq.lengthPulses,
     };
     if (seq.isNew) edit.create = true;
+    if (seq.name) edit.name = seq.name;
     return edit;
   });
 }
@@ -541,6 +580,7 @@ function renderSlots() {
     button.type = "button";
     button.className = "slot";
     button.textContent = String(key + 1);
+    if (seq?.name) button.title = seq.name;
     const used = seq && notesOf(seq).length > 0;
     button.classList.toggle("has-pattern", Boolean(used));
     button.classList.toggle("queued", key === state.queuedKey);
@@ -1015,6 +1055,7 @@ function renderChrome() {
   updateFileButtons();
   renderSlots();
   renderBanks();
+  renderSequenceName();
 }
 
 function renderAll() {
@@ -2126,6 +2167,20 @@ function bindControls() {
   $("card").addEventListener("click", connectCard);
   $("library").addEventListener("click", chooseLibrary);
   $("project-save").addEventListener("click", saveProject);
+  $("sequence-name").addEventListener("change", (event) => renameSequence(event.target.value));
+  $("grid-title").addEventListener("click", () => {
+    const seq = sequence();
+    if (!seq) return;
+    const answer = window.prompt("Name this sequence", seq.name || `Sequence ${seq.key + 1}`);
+    if (answer !== null) renameSequence(answer);
+  });
+  $("sequence-name").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") event.target.blur();
+    if (event.key === "Escape") {
+      event.target.value = sequence()?.name || "";
+      event.target.blur();
+    }
+  });
   $("project-save-as").addEventListener("click", saveProjectAs);
   $("to-card").addEventListener("click", copyToCard);
   $("discard").addEventListener("click", discardChanges);
