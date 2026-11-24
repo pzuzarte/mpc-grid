@@ -419,10 +419,24 @@ async function saveToCard({ ask = true } = {}) {
   }
 }
 
+// Writes the project as it is here, unsaved changes included, to the card under its own
+// name, replacing a project of that name there after backing it up.
 async function copyToCard() {
   try {
+    stop();
+    await flushDraft();
+    const keys = savableKeys();
+    if (keys.length && state.view.canSave !== false) {
+      const saved = await backend.saveInPlace({ path: state.path, edits: editsFor(keys) });
+      markSaved(saved, keys);
+    }
+    setStatus("Copying to the card...");
     const copied = await backend.copyToCard({ path: state.path });
-    setStatus(`Copied ${copied.name} to the card. Eject the card before leaving SD Card Access mode.`);
+    state.onCard = true;
+    await refreshProjects();
+    renderAll();
+    const how = copied.replaced ? `Replaced ${copied.name} on the card with the version here. The card's previous version is kept as a backup in ${libraryPlace()}.` : `Copied ${copied.name} to the card.`;
+    setStatus(`${how} Eject the card before leaving SD Card Access mode.`);
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -462,7 +476,9 @@ function updateFileButtons() {
   const canSave = hasProject && changed && state.view.canSave !== false;
   $("project-save").disabled = !canSave;
   $("project-save-as").disabled = !canSave;
-  $("to-card").disabled = !hasProject || !state.cardMounted || changed;
+  $("to-card").disabled = !hasProject || !state.cardMounted;
+  $("to-card").title = !state.cardMounted ? "Enter SD Card Access mode on the MPC and connect the card first"
+    : "Write this project as it is here, unsaved changes included, to the card under its own name, replacing one of that name there";
   $("discard").disabled = !hasChanges();
   const label = $("pattern-name");
   label.textContent = hasProject ? state.projectName : "No project";

@@ -470,8 +470,28 @@ const Backend = (() => {
         throw new XpjLib.XpjError("No card found. Put the MPC in SD Card Access mode and connect the card.");
       }
       const bytes = await readBytes(await library.getFileHandle(xpjName(stem)));
-      await writeNewProject(library, stem, bytes, cardDir, stem);
-      return { name: stem };
+      const existing = await childFile(cardDir, xpjName(stem));
+      if (!existing) {
+        await writeNewProject(library, stem, bytes, cardDir, stem);
+        return { name: stem, replaced: false };
+      }
+      // A project of the same name on the card is replaced, after backing it up here. Its
+      // samples are added to, so none the card's version needs are lost.
+      const oldBytes = await readBytes(existing);
+      const backupDir = await backups();
+      await writeBytes(backupDir, xpjName(`${stem}-${Date.now()}`), oldBytes);
+      await pruneBackups(backupDir, stem);
+      const sourceData = await childDir(library, dataName(stem));
+      if (sourceData) await copyFolder(sourceData, await cardDir.getDirectoryHandle(dataName(stem), { create: true }));
+      const handle = await writeBytes(cardDir, xpjName(stem), bytes);
+      if (!sameBytes(await readBytes(handle), bytes)) {
+        await writeBytes(cardDir, xpjName(stem), oldBytes);
+        throw new XpjLib.XpjError("Read-back check failed, so the card's project was put back as it was.");
+      }
+      await removeAppleDouble(cardDir, stem);
+      changeCache.delete(stem);
+      await kv.remove(`ahead:${stem}`);
+      return { name: stem, replaced: true };
     }
 
     const readDraft = async ({ name }) => ({ draft: (await kv.get(`draft:${name}`)) || null });

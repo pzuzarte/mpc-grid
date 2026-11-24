@@ -76,7 +76,8 @@ test("saving makes a new project, leaving originals alone, then copies to the ca
   assert.deepEqual(await read(card, "song-v2.xpj"), await read(library, "song-v2.xpj"));
   const copied = await card.getDirectoryHandle("song-v2_[ProjectData]");
   assert.deepEqual(await names(copied), ["kick.wav"]);
-  await assert.rejects(backend.copyToCard({ path: saved.path }), Xpj.XpjError);
+  const again = await backend.copyToCard({ path: saved.path });
+  assert.equal(again.replaced, true, "a second copy replaces the card's");
 });
 
 test("saving never overwrites and rejects unsafe names", async () => {
@@ -338,4 +339,19 @@ test("Save to card won't overwrite a card project the MPC changed after a save h
   await write(card, "song.xpj", changed);
   await assert.rejects(backend.saveToCard({ path, edits: [] }), /changed on the MPC/);
   assert.deepEqual(await read(card, "song.xpj"), changed);
+});
+
+test("Copy to card replaces a project of the same name, backing up the card's and keeping its samples", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  await write(await card.getDirectoryHandle("song_[ProjectData]"), "only-on-card.wav", text("card"));
+  const notes = [{ time: 0, note: 36, velocity: 1, length: 60, probability: 100 }];
+  await backend.saveInPlace({ path, edits: [{ sequence: 0, track: "Drum 001", notes }] });
+  const copied = await backend.copyToCard({ path });
+  assert.deepEqual(copied, { name: "song", replaced: true });
+  assert.deepEqual(await read(card, "song.xpj"), await read(library, "song.xpj"));
+  assert.ok((await names(await card.getDirectoryHandle("song_[ProjectData]"))).includes("only-on-card.wav"));
+  const backupDir = await library.getDirectoryHandle("backups");
+  assert.ok((await names(backupDir)).filter((n) => /^song-\d+\.xpj$/.test(n)).length >= 1);
+  assert.equal(await kv.get("ahead:song"), undefined);
 });
