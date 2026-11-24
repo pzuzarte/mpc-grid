@@ -837,7 +837,21 @@ const modeIndex = (value) => {
   return found < 0 ? 0 : found;
 };
 const lanePoints = () => sequence()?.automation?.[track().name] || [];
-const PARAM_NAMES = { 514: "Cutoff", 515: "Resonance", 1082: "Filter mode" };
+const PARAM_NAMES = { 514: "Cutoff", 515: "Resonance", 1082: "Filter mode", 1043: "Pitch", 1044: "Fine pitch" };
+// The lane menu's order: the filter, then pitch.
+const LANE_ORDER = [514, 515, 1082, 1043, 1044];
+// Pitch lanes draw up or down from the centre, in whole semitones or cents.
+const PITCH_UNITS = { 1043: { steps: 72, range: 36, unit: "semitone" }, 1044: { steps: 198, range: 99, unit: "cent" } };
+const pitchUnits = (parameter, value) => Math.round((value - 0.5) * PITCH_UNITS[parameter].steps);
+function describeValue(parameter, value) {
+  if (parameter === Xpj.FILTER.mode) return MODES[modeIndex(value)].name;
+  const pitch = PITCH_UNITS[parameter];
+  if (pitch) {
+    const units = pitchUnits(parameter, value);
+    return `${units > 0 ? "+" : ""}${units} ${pitch.unit}${Math.abs(units) === 1 ? "" : "s"}`;
+  }
+  return String(Math.round(value * 127));
+}
 
 function editablePoints() {
   const seq = sequence();
@@ -890,7 +904,8 @@ function renderLane() {
     name.title = name.textContent;
     const select = document.createElement("select");
     select.setAttribute("aria-label", `Knob shown for pad ${padId(pad.pad)}`);
-    for (const [param, label] of Object.entries(PARAM_NAMES)) {
+    for (const param of LANE_ORDER) {
+      const label = PARAM_NAMES[param];
       const moved = lanePoints().some((p) => p.note === lane.note && p.parameter === Number(param));
       select.append(new Option(`${moved ? "* " : ""}${label}`, param));
     }
@@ -950,9 +965,14 @@ function paintLane(canvas, width) {
   // A knob holds its value until the next point, as the MPC plays it.
   const points = lanePoints().filter((p) => p.note === note && p.parameter === parameter).sort((a, b) => a.time - b.time);
   const mode = parameter === Xpj.FILTER.mode;
+  const pitch = Boolean(PITCH_UNITS[parameter]);
   const level = (value) => (mode ? (modeIndex(value) + 1) / MODES.length : value);
   const accent = style.getPropertyValue("--accent") || "#f80";
   const text = style.getPropertyValue("--text") || "#fff";
+  if (pitch) {
+    ctx.fillStyle = style.getPropertyValue("--strong") || "#aaa";
+    ctx.fillRect(0, Math.round(height / 2), width, 1);
+  }
   ctx.font = "10px sans-serif";
   const end = sequence().lengthPulses;
   points.forEach((point, index) => {
@@ -960,12 +980,14 @@ function paintLane(canvas, width) {
     if (until <= state.windowStart || point.time >= state.windowStart + span) return;
     const x0 = Math.max(0, xAt(point.time));
     const x1 = Math.min(width, xAt(until));
-    const bar = level(point.value) * height;
+    // Pitch fills from the centre line, the rest from the bottom.
+    const top = pitch ? Math.min(height / 2, height - point.value * height) : height - level(point.value) * height;
+    const bar = pitch ? Math.max(1, Math.abs(point.value - 0.5) * height) : level(point.value) * height;
     ctx.fillStyle = accent;
     ctx.globalAlpha = 0.35;
-    ctx.fillRect(x0, height - bar, x1 - x0, bar);
+    ctx.fillRect(x0, top, x1 - x0, bar);
     ctx.globalAlpha = 1;
-    ctx.fillRect(x0, height - bar, Math.max(1, xAt(point.time + LANE_TICKS) - xAt(point.time)), bar);
+    ctx.fillRect(x0, top, Math.max(1, xAt(point.time + LANE_TICKS) - xAt(point.time)), bar);
     if (mode && (index === 0 || modeIndex(points[index - 1].value) !== modeIndex(point.value))) {
       ctx.fillStyle = text;
       ctx.fillText(MODES[modeIndex(point.value)].name, x0 + 3, 11);
@@ -992,9 +1014,16 @@ function laneStroke(event) {
   const time = Math.min(end - LANE_TICKS, Math.floor(raw / LANE_TICKS) * LANE_TICKS);
   const share = 1 - y / box.height;
   const mode = drag.parameter === Xpj.FILTER.mode;
+  const pitch = PITCH_UNITS[drag.parameter];
+  // Pitch snaps to whole semitones or cents, the way the MPC stores it.
+  const snap = (raw) => {
+    if (!pitch) return Math.round(Math.max(0, Math.min(1, raw)) * 127) / 127;
+    const units = Math.max(-pitch.range, Math.min(pitch.range, Math.round((raw - 0.5) * pitch.steps)));
+    return 0.5 + units / pitch.steps;
+  };
   const value = mode
     ? MODES[Math.max(0, Math.min(MODES.length - 1, Math.floor(share * MODES.length)))].type / Xpj.MODE_SCALE
-    : Math.round(Math.max(0, Math.min(1, share)) * 127) / 127;
+    : snap(share);
   // Fills the gap since the last point, as a fast drag skips over some.
   const from = drag.last ? drag.last.time : time;
   const startValue = drag.last ? drag.last.value : value;
@@ -1002,13 +1031,13 @@ function laneStroke(event) {
   const count = Math.abs(time - from) / LANE_TICKS;
   for (let index = 0; index <= count; index += 1) {
     const between = count ? index / count : 1;
-    const v = mode ? value : Math.round((startValue + (value - startValue) * between) * 127) / 127;
+    const v = mode ? value : snap(startValue + (value - startValue) * between);
     setLanePoint(drag.note, drag.parameter, from + index * step, v, drag.erase);
   }
   drag.last = { time, value };
   paintLane(drag.canvas, box.width);
   const name = PARAM_NAMES[drag.parameter];
-  setStatus(drag.erase ? `Erasing ${name.toLowerCase()}.` : `${name}: ${mode ? MODES[modeIndex(value)].name : Math.round(value * 127)}.`);
+  setStatus(drag.erase ? `Erasing ${name.toLowerCase()}.` : `${name}: ${describeValue(drag.parameter, value)}.`);
 }
 
 function clearLane(lane) {

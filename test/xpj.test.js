@@ -289,7 +289,7 @@ test("only real filter modes and in-range values are accepted, and other automat
   const edit = (point) => () => Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], automation: [point] }]);
   assert.throws(edit({ time: 0, note: 36, parameter: Xpj.FILTER.mode, value: 0.5 }), /filter modes/);
   assert.throws(edit({ time: 0, note: 36, parameter: Xpj.FILTER.cutoff, value: 1.5 }), /out of range/);
-  assert.throws(edit({ time: 0, note: 36, parameter: 9999, value: 0.5 }), /Not a filter setting/);
+  assert.throws(edit({ time: 0, note: 36, parameter: 9999, value: 0.5 }), /Not a setting the lanes edit/);
   edit({ time: 0, note: 36, parameter: Xpj.FILTER.resonance, value: 0.4 })();
   assert.ok(eventsOf(project).includes(other));
   assert.equal(Xpj.FILTER_MODES.map((m) => m.name).join(" "), "Off Classic LPF2 LPF4 HPF2 HPF4 BPF2 BPF4");
@@ -304,4 +304,18 @@ test("a pad's own filter mode is read and saved", async () => {
   const again = await Xpj.parse(await Xpj.serialise(project));
   assert.equal(Xpj.view(again).tracks[0].pads[0].filterType, 8);
   assert.throws(() => Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], padFilters: [{ pad: pad.pad, type: 5 }] }]), /filter modes/);
+});
+
+test("pitch movements are whole semitones or cents around the centre", async () => {
+  const project = await makeProject();
+  const { PITCH } = Xpj;
+  Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], automation: [
+    { time: 0, note: 36, parameter: PITCH.coarse, value: 0.5 + 7 / 72 },
+    { time: 240, note: 36, parameter: PITCH.fine, value: 0.5 - 50 / 198 },
+  ] }]);
+  const points = Xpj.view(await Xpj.parse(await Xpj.serialise(project))).sequences[0].automation["Drum 001"];
+  assert.equal(Math.round((points.find((p) => p.parameter === PITCH.coarse).value - 0.5) * 72), 7);
+  assert.throws(() => Xpj.applyEdits(project, [{ sequence: 0, track: "Drum 001", notes: [NOTE], automation: [
+    { time: 0, note: 36, parameter: PITCH.coarse, value: 0.51 },
+  ] }]), /whole semitone/);
 });

@@ -13,7 +13,11 @@ const Xpj = (() => {
   /* The pad filter settings the MPC Sample records as automation: cutoff and resonance
      from 0 to 1, and the filter mode as its type number divided by 29. */
   const FILTER = { cutoff: 514, resonance: 515, mode: 1082 };
-  const FILTER_PARAMETERS = new Set(Object.values(FILTER));
+  /* Pitch as the MPC records it: coarse in semitones, from -36 to +36, as 0.5 plus
+     semitones/72, and fine in cents, from -99 to +99, as 0.5 plus cents/198. */
+  const PITCH = { coarse: 1043, fine: 1044 };
+  const PITCH_STEPS = { 1043: 72, 1044: 198 };
+  const FILTER_PARAMETERS = new Set([...Object.values(FILTER), ...Object.values(PITCH)]);
   const MODE_SCALE = 29;
   // The mode knob's eight positions, in order, with the type each stores.
   const FILTER_MODES = [
@@ -296,8 +300,12 @@ const Xpj = (() => {
     const { time, note, parameter, value } = raw;
     if (!Number.isInteger(time) || time < 0 || time >= lengthPulses) throw new XpjError(`Filter point outside the sequence: ${show}`);
     if (!Number.isInteger(note) || note < 0 || note > 127) throw new XpjError(`Filter point for a bad pad: ${show}`);
-    if (!FILTER_PARAMETERS.has(parameter)) throw new XpjError(`Not a filter setting: ${show}`);
+    if (!FILTER_PARAMETERS.has(parameter)) throw new XpjError(`Not a setting the lanes edit: ${show}`);
     if (typeof value !== "number" || !(value >= 0 && value <= 1)) throw new XpjError(`Filter value out of range: ${show}`);
+    const steps = PITCH_STEPS[parameter];
+    if (steps && Math.abs(Math.round(value * steps) - value * steps) > 0.001) {
+      throw new XpjError(`Not a whole ${parameter === PITCH.coarse ? "semitone" : "cent"}: ${show}`);
+    }
     if (parameter === FILTER.mode && !FILTER_MODES.some((mode) => Math.abs(mode.type / MODE_SCALE - value) < 0.001)) {
       throw new XpjError(`Not one of the MPC's filter modes: ${show}`);
     }
@@ -311,7 +319,7 @@ const Xpj = (() => {
     };
   }
 
-  /* Replace one track's filter movements in one sequence. Other automation and the notes
+  /* Replace one track's filter and pitch movements in one sequence. Other automation and the notes
      are kept. Each pad and setting starts with a point at the sequence's start, which the
      MPC marks as invented, as it does for the ones it records. */
   function setAutomation(project, sequenceKey, trackName, points) {
@@ -340,12 +348,11 @@ const Xpj = (() => {
       added.push(same && num(same.automation.value) === point.value
         ? same : automationEvent(point.time, point.note, point.parameter, point.value, point.time === 0));
     }
-    // At the same time, automation goes ahead of notes, as the MPC saves it.
+    // Events at the same time go in order of their type, then as they were, as the MPC
+    // saves them: other events (type 1), then automation (2), then notes (3).
     clip.eventList.events = [...kept, ...added]
       .map((event, index) => ({ event, index }))
-      .sort((a, b) => a.event.time - b.event.time
-        || (a.event.type === AUTOMATION_EVENT ? 0 : 1) - (b.event.type === AUTOMATION_EVENT ? 0 : 1)
-        || a.index - b.index)
+      .sort((a, b) => a.event.time - b.event.time || (a.event.type ?? 9) - (b.event.type ?? 9) || a.index - b.index)
       .map(({ event }) => event);
   }
 
@@ -460,6 +467,8 @@ const Xpj = (() => {
     DATA_SUFFIX,
     FILTER,
     FILTER_MODES,
+    PITCH,
+    PITCH_STEPS,
     MODE_SCALE,
     SEQUENCE_SLOTS,
     XpjError,
