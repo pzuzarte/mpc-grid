@@ -402,9 +402,9 @@ async function saveCopy() {
 }
 
 // Writes the changes straight into the project on the card, under its own name.
-async function saveToCard() {
+async function saveToCard({ ask = true } = {}) {
   const keys = savableKeys();
-  if (!window.confirm(`Save your changes into ${state.projectName} on the card? This replaces the project file on the card. The previous version is kept as a backup in ${libraryPlace()}.`)) return;
+  if (ask && !window.confirm(`Save your changes into ${state.projectName} on the card? This replaces the project file on the card. The previous version is kept as a backup in ${libraryPlace()}.`)) return;
   try {
     stop();
     await flushDraft();
@@ -459,18 +459,60 @@ function writeDraft() {
 function updateFileButtons() {
   const hasProject = !isBlank();
   const changed = savableKeys().length > 0;
-  $("save").disabled = !hasProject || !changed || state.view.canSave === false;
-  $("save-name").disabled = !hasProject;
+  const canSave = hasProject && changed && state.view.canSave !== false;
+  $("project-save").disabled = !canSave;
+  $("project-save-as").disabled = !canSave;
   $("to-card").disabled = !hasProject || !state.cardMounted || changed;
-  const onCard = hasProject && Boolean(state.onCard);
-  $("save-card").hidden = !onCard;
-  $("save-card").disabled = !onCard || !state.cardMounted || !changed || state.view.canSave === false;
-  if (onCard) {
-    $("save-card").textContent = `Save to ${state.projectName} on card`;
-    $("save-card").title = state.cardMounted ? "Replace this project on the card with your changes"
-      : "Enter SD Card Access mode on the MPC to save to the card";
-  }
   $("discard").disabled = !hasChanges();
+  const label = $("pattern-name");
+  label.textContent = hasProject ? state.projectName : "No project";
+  label.classList.toggle("untitled", !hasProject);
+  label.title = !hasProject ? "Choose a project in the Project menu to save patterns into it."
+    : state.onCard && state.cardMounted ? `Save puts your changes into ${state.projectName} on the card.`
+      : state.onCard ? `Save keeps your changes in your library. With the card connected, Save puts them on the card too.`
+        : `Save puts your changes into ${state.projectName} in your library.`;
+}
+
+// Save puts changes into the same project: on the card when it's there and connected,
+// otherwise in the library, keeping a backup either way.
+async function saveProject() {
+  if (isBlank()) {
+    setStatus("Choose a project in the Project menu first. Patterns are saved into a project.", true);
+    return;
+  }
+  if (!savableKeys().length) {
+    setStatus("There are no changes to save.");
+    return;
+  }
+  if (state.onCard && state.cardMounted) {
+    await saveToCard({ ask: false });
+    return;
+  }
+  const keys = savableKeys();
+  try {
+    stop();
+    await flushDraft();
+    const saved = await backend.saveInPlace({ path: state.path, edits: editsFor(keys) });
+    markSaved(saved, keys);
+    await refreshProjects();
+    renderAll();
+    const later = state.onCard ? " Save again with the card connected to put it on the card." : "";
+    setStatus(`Saved ${keys.length} sequence(s) into ${saved.name} in ${libraryPlace()}. The previous version is kept as a backup.${later}`);
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+// Save as makes a new project in the library, with a name you choose.
+async function saveProjectAs() {
+  if (isBlank()) {
+    setStatus("Choose a project in the Project menu first. Patterns are saved into a project.", true);
+    return;
+  }
+  const name = window.prompt("Save as a new project called", nextSaveName(state.projectName));
+  if (name === null || !name.trim()) return;
+  $("save-name").value = name.trim();
+  await saveCopy();
 }
 
 /* ---------- Rendering ---------- */
@@ -2067,14 +2109,23 @@ function bindControls() {
   });
   $("card").addEventListener("click", connectCard);
   $("library").addEventListener("click", chooseLibrary);
-  $("save").addEventListener("click", saveCopy);
-  $("save-card").addEventListener("click", saveToCard);
+  $("project-save").addEventListener("click", saveProject);
+  $("project-save-as").addEventListener("click", saveProjectAs);
   $("to-card").addEventListener("click", copyToCard);
   $("discard").addEventListener("click", discardChanges);
 
   const typing = (target) => /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName);
   window.addEventListener("keydown", (event) => {
     if ($("help").open || $("send-dialog").open) return;
+    // Cmd+S saves into the project, and Cmd+Shift+S saves a new one.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      if (!event.repeat) {
+        if (event.shiftKey) saveProjectAs();
+        else saveProject();
+      }
+      return;
+    }
     if (event.key === "?" && !typing(event.target)) {
       openHelp();
       return;

@@ -53,6 +53,13 @@ const Backend = (() => {
     return handle;
   }
 
+  // A short fingerprint of a file, to tell whether it has changed.
+  function fingerprint(bytes) {
+    let hash = 0x811c9dc5;
+    for (const byte of bytes) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+    return `${bytes.length}:${hash.toString(16)}`;
+  }
+
   const sameBytes = (a, b) => a.length === b.length && a.every((value, i) => value === b[i]);
 
   async function removeIfPresent(parent, name) {
@@ -271,7 +278,8 @@ const Backend = (() => {
           card = await Promise.all((await projectStems(cardDir)).map(async (name) => ({
             path: `card:${name}`,
             name,
-            changed: await differsFromLibrary(cardDir, name),
+            // A project saved here since, and not yet on the card, isn't replaced from it.
+            changed: !(await kv.get(`ahead:${name}`)) && await differsFromLibrary(cardDir, name),
           })));
         } catch (error) {
           if (!isMissing(error)) throw error;
@@ -349,7 +357,7 @@ const Backend = (() => {
           const bytes = await readBytes(file);
           await XpjLib.parse(bytes);
           await writeNewProject(cardDir, stem, bytes, library, stem);
-        } else if (await differsFromLibrary(cardDir, stem)) {
+        } else if (!(await kv.get(`ahead:${stem}`)) && await differsFromLibrary(cardDir, stem)) {
           await replaceFromCard(cardDir, stem);
           updated = true;
           changeCache.delete(stem);
@@ -392,11 +400,18 @@ const Backend = (() => {
       }
       const cardFile = await childFile(cardDir, xpjName(stem));
       if (!cardFile) throw new XpjLib.XpjError(`There's no project called "${stem}" on the card. Use Copy to card instead.`);
-      if (await differsFromLibrary(cardDir, stem)) {
+      const oldBytes = await readBytes(cardFile);
+      // Saved here since it was last on the card: this copy goes to the card, unless the
+      // card's has changed too, on the MPC.
+      const ahead = await kv.get(`ahead:${stem}`);
+      if (ahead && fingerprint(oldBytes) !== ahead.card) {
+        throw new XpjLib.XpjError(`${stem} was saved here and also changed on the MPC since. To keep both, use Save as here, then open the card's copy.`);
+      }
+      if (!ahead && await differsFromLibrary(cardDir, stem)) {
         throw new XpjLib.XpjError(`${stem} on the card has changed since it was opened here. Open it again from the card, then save.`);
       }
-      const oldBytes = await readBytes(cardFile);
-      const project = await XpjLib.parse(oldBytes);
+      const base = ahead ? await readBytes(await library.getFileHandle(xpjName(stem))) : oldBytes;
+      const project = await XpjLib.parse(base);
       XpjLib.applyEdits(project, edits || []);
       const bytes = await XpjLib.serialise(project);
       await XpjLib.parse(bytes);
@@ -412,6 +427,35 @@ const Backend = (() => {
       }
       await removeIfPresent(cardDir, `._${xpjName(stem)}`);
       await writeBytes(library, xpjName(stem), bytes);
+      changeCache.delete(stem);
+      await kv.remove(`draft:${stem}`);
+      await kv.remove(`ahead:${stem}`);
+      return { path: `library:${stem}`, name: stem };
+    }
+
+    /* Saves edits into the same project in the library, keeping its name. The previous
+       version is backed up first, and the new file is read back and checked. */
+    async function saveInPlace({ path, edits }) {
+      await ensureLibrary();
+      const { place, stem } = splitPath(path);
+      if (place !== "library") throw new XpjLib.XpjError("Only library projects can be saved.");
+      const file = await childFile(library, xpjName(stem));
+      if (!file) throw new XpjLib.XpjError("That project is no longer available.");
+      const oldBytes = await readBytes(file);
+      const project = await XpjLib.parse(oldBytes);
+      XpjLib.applyEdits(project, edits || []);
+      const bytes = await XpjLib.serialise(project);
+      await XpjLib.parse(bytes);
+      const backupDir = await backups();
+      await writeBytes(backupDir, xpjName(`${stem}-${Date.now()}`), oldBytes);
+      await pruneBackups(backupDir, stem);
+      // Remembers what the card had, so a later Save to card can tell if the MPC changed it.
+      if (!(await kv.get(`ahead:${stem}`))) await kv.set(`ahead:${stem}`, { card: fingerprint(oldBytes) });
+      const handle = await writeBytes(library, xpjName(stem), bytes);
+      if (!sameBytes(await readBytes(handle), bytes)) {
+        await writeBytes(library, xpjName(stem), oldBytes);
+        throw new XpjLib.XpjError("Read-back check failed, so the project was put back as it was.");
+      }
       changeCache.delete(stem);
       await kv.remove(`draft:${stem}`);
       return { path: `library:${stem}`, name: stem };
@@ -448,6 +492,7 @@ const Backend = (() => {
       save,
       copyToCard,
       saveToCard,
+      saveInPlace,
       readDraft,
       writeDraft,
     };

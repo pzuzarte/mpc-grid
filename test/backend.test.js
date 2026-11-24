@@ -302,3 +302,40 @@ test("the card can't be the library folder", async () => {
   cardRoot.permission = "granted";
   await assert.rejects(backend.setLibraryFolder(cardRoot), /card folder/);
 });
+
+test("saving in place updates the library project and backs up the old one", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  const notes = [{ time: 480, note: 38, velocity: 1, length: 120, probability: 100 }];
+  const saved = await backend.saveInPlace({ path, edits: [{ sequence: 0, track: "Drum 001", notes }] });
+  assert.equal(saved.path, "library:song");
+  const view = Xpj.view(await Xpj.parse(await read(library, "song.xpj")));
+  assert.deepEqual(view.sequences[0].notes["Drum 001"], notes);
+  const backupDir = await library.getDirectoryHandle("backups");
+  assert.ok((await names(backupDir)).some((n) => /^song-\d+\.xpj$/.test(n)));
+  assert.deepEqual(await read(card, "song.xpj"), original, "the card isn't changed");
+});
+
+test("a project saved here isn't replaced from the card, and Save to card takes it there", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  const first = [{ time: 0, note: 36, velocity: 1, length: 60, probability: 100 }];
+  await backend.saveInPlace({ path, edits: [{ sequence: 0, track: "Drum 001", notes: first }] });
+  assert.deepEqual((await backend.projects()).card.map((p) => p.changed), [false], "not seen as changed on the card");
+  await backend.open({ path: "card:song" });
+  assert.deepEqual(Xpj.view(await Xpj.parse(await read(library, "song.xpj"))).sequences[0].notes["Drum 001"], first, "kept");
+  const second = [...first, { time: 240, note: 38, velocity: 1, length: 60, probability: 100 }];
+  await backend.saveToCard({ path, edits: [{ sequence: 0, track: "Drum 001", notes: second }] });
+  assert.deepEqual(Xpj.view(await Xpj.parse(await read(card, "song.xpj"))).sequences[0].notes["Drum 001"], second);
+  assert.equal(await kv.get("ahead:song"), undefined);
+});
+
+test("Save to card won't overwrite a card project the MPC changed after a save here", async () => {
+  await backend.setCard(cardRoot);
+  const { path } = await backend.open({ path: "card:song" });
+  await backend.saveInPlace({ path, edits: [{ sequence: 0, track: "Drum 001", notes: [] }] });
+  const changed = await gzip(projectText().replace('"sampleName": ""', '"sampleName": "New Snare"'));
+  await write(card, "song.xpj", changed);
+  await assert.rejects(backend.saveToCard({ path, edits: [] }), /changed on the MPC/);
+  assert.deepEqual(await read(card, "song.xpj"), changed);
+});

@@ -437,3 +437,8 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 
 /* The end of a note that crosses the end of the pattern, shown at its start. */
 .note-bar.wrapped { opacity: 0.6; border-left: 2px dashed rgba(255, 255, 255, 0.7); }
+
+/* The name of the project, shown large so it's clear which one is loaded. */
+.name-bar { align-items: center; }
+.pattern-name { min-width: 0; max-width: 40ch; overflow: hidden; font-size: 20px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.pattern-name.untitled { color: var(--muted); font-weight: 400; font-style: italic; }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611232300">
+<link rel="stylesheet" href="style.css?v=202611232345">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if ((localStorage.getItem("midi-grids-theme") || localStorage.getItem("mpc-grid-theme")) === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -48,6 +48,13 @@
   <button id="theme-toggle" class="theme-toggle" type="button" title="Switch between dark and light mode, for all the grids" aria-label="Dark or light mode">☀</button>
   <button id="help-open" type="button" title="Help (press ?)">Help</button>
 </header>
+
+<section class="bar name-bar" aria-label="This project">
+  <span class="group-label">Project</span>
+  <strong id="pattern-name" class="pattern-name untitled">No project</strong>
+  <button id="project-save" class="primary" type="button" title="Save your changes into this project (Cmd+S): on the card when it's there and connected, otherwise in your library, keeping a backup">Save</button>
+  <button id="project-save-as" type="button" title="Save your changes as a new project in your library, with a name you choose (Cmd+Shift+S)">Save as&hellip;</button>
+</section>
 
 <section class="bar slots-bar" aria-label="Sequences">
   <span class="group-label">Sequence</span>
@@ -177,11 +184,7 @@
   <p id="status" class="status" role="status" aria-live="polite"></p>
   <div class="spacer"></div>
   <span id="dirty" class="dirty" hidden>Changes kept in this browser, not yet in a project</span>
-  <label>Save as
-    <input id="save-name" type="text" maxlength="64" spellcheck="false">
-  </label>
-  <button id="save" type="button">Save to new project</button>
-  <button id="save-card" class="primary" type="button" hidden>Save to card</button>
+  <input id="save-name" type="hidden">
   <button id="to-card" type="button">Copy to card</button>
   <button id="discard" type="button">Discard changes</button>
 </footer>
@@ -250,13 +253,13 @@
     </ol>
 
     <h3>Save patterns to the MPC</h3>
-    <p><b>Straight onto the card:</b> in SD mode, open the project from <b>On the card</b>, edit it, and click <b>Save to [project] on card</b>. This replaces that project's file on the card under the same name, so there's no new project to name. Its samples aren't touched, and the previous version is kept as a backup in your library. Then eject the card and load the project on the MPC.</p>
-    <p><b>As a new project</b>, leaving the original alone:</p>
-    <ol>
-      <li>Click <b>Save to new project</b>. This creates a new copy in your library and leaves the original alone.</li>
-      <li>Enter SD mode, then click <b>Copy to card</b>. It never overwrites a project already on the card.</li>
-      <li>Eject the card, press <kbd>B1</kbd>, and load the new project on the MPC. Sequence slots 1-16 match pads 1-16 in the MPC's Sequence Mode.</li>
-    </ol>
+    <p>The open project's name is shown large at the top.</p>
+    <ul>
+      <li><b>Save</b> (Cmd+S) puts your changes into the same project, under the same name. With the card connected in SD mode and the project on it, that's the project on the card, and your library's copy is updated too. Otherwise it's your library's copy, and the next Save with the card connected puts it on the card. If the project was also changed on the MPC in between, the page won't overwrite it, and says so. The previous version is always kept as a backup in your library, and samples aren't touched.</li>
+      <li><b>Save as&hellip;</b> (Cmd+Shift+S) asks for a name and makes a new project in your library, leaving the original alone. Enter SD mode and click <b>Copy to card</b> to put it on the card. It never overwrites a project already there.</li>
+      <li>An MPC project is a file with a folder of samples beside it, so it's saved into your library rather than with the Mac's Save dialog, which saves single files.</li>
+      <li>Then eject the card, press <kbd>B1</kbd>, and load the project on the MPC. Sequence slots 1-16 match pads 1-16 in the MPC's Sequence Mode.</li>
+    </ul>
     <p><b>Unsaved patterns</b> are autosaved in this browser, and the yellow message shows they aren't in a project yet. <b>Discard changes</b> removes them.</p>
     <p class="help-warning"><b>Unsaved patterns stay in this browser.</b> Clearing this browser's data for the site erases them, and also the library if you haven't chosen a library folder. Save your work into a project to keep it.</p>
 
@@ -330,11 +333,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611232300"></script>
-<script src="backend.js?v=202611232300"></script>
-<script src="sync.js?v=202611232300"></script>
-<script src="recorder.js?v=202611232300"></script>
-<script src="app.js?v=202611232300"></script>
+<script src="xpj.js?v=202611232345"></script>
+<script src="backend.js?v=202611232345"></script>
+<script src="sync.js?v=202611232345"></script>
+<script src="recorder.js?v=202611232345"></script>
+<script src="app.js?v=202611232345"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {
