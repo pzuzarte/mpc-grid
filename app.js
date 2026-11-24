@@ -837,9 +837,11 @@ const modeIndex = (value) => {
   return found < 0 ? 0 : found;
 };
 const lanePoints = () => sequence()?.automation?.[track().name] || [];
-const PARAM_NAMES = { 514: "Cutoff", 515: "Resonance", 1082: "Filter mode", 1043: "Pitch", 1044: "Fine pitch" };
+// Velocity isn't a knob: its lane sets the hits' own velocities.
+const VELOCITY_LANE = 0;
+const PARAM_NAMES = { 0: "Velocity", 514: "Cutoff", 515: "Resonance", 1082: "Filter mode", 1043: "Pitch", 1044: "Fine pitch" };
 // The lane menu's order: the filter, then pitch.
-const LANE_ORDER = [514, 515, 1082, 1043, 1044];
+const LANE_ORDER = [VELOCITY_LANE, 514, 515, 1082, 1043, 1044];
 // Pitch lanes draw up or down from the centre, in whole semitones or cents.
 const PITCH_UNITS = { 1043: { steps: 72, range: 36, unit: "semitone" }, 1044: { steps: 198, range: 99, unit: "cent" } };
 const pitchUnits = (parameter, value) => Math.round((value - 0.5) * PITCH_UNITS[parameter].steps);
@@ -906,7 +908,7 @@ function renderLane() {
     select.setAttribute("aria-label", `Knob shown for pad ${padId(pad.pad)}`);
     for (const param of LANE_ORDER) {
       const label = PARAM_NAMES[param];
-      const moved = lanePoints().some((p) => p.note === lane.note && p.parameter === Number(param));
+      const moved = param !== VELOCITY_LANE && lanePoints().some((p) => p.note === lane.note && p.parameter === Number(param));
       select.append(new Option(`${moved ? "* " : ""}${label}`, param));
     }
     select.value = String(lane.parameter);
@@ -919,8 +921,8 @@ function renderLane() {
     const padMode = document.createElement("select");
     padMode.setAttribute("aria-label", `Filter mode for pad ${padId(pad.pad)}`);
     padMode.title = "The pad's own filter mode, as the MPC's mode knob sets it. Drawn Filter mode movements change it during the sequence.";
-    if (!Number.isInteger(pad.filterType)) padMode.append(new Option("Mode: unknown", ""));
-    padMode.append(...MODES.map((item) => new Option(`Mode: ${item.name}`, String(item.type))));
+    if (!Number.isInteger(pad.filterType)) padMode.append(new Option("Filter Mode: unknown", ""));
+    padMode.append(...MODES.map((item) => new Option(`Filter Mode: ${item.name}`, String(item.type))));
     padMode.value = Number.isInteger(pad.filterType) ? String(pad.filterType) : "";
     padMode.disabled = isBlank();
     padMode.addEventListener("change", () => setPadFilter(pad, Number(padMode.value)));
@@ -928,6 +930,7 @@ function renderLane() {
     const clear = Object.assign(document.createElement("button"), { type: "button", textContent: "Clear" });
     clear.title = `Remove ${padId(pad.pad)}'s ${PARAM_NAMES[lane.parameter].toLowerCase()} movements`;
     clear.addEventListener("click", () => clearLane(lane));
+    clear.disabled = lane.parameter === VELOCITY_LANE;
     const close = Object.assign(document.createElement("button"), { type: "button", textContent: "×" });
     close.title = "Close this lane";
     close.setAttribute("aria-label", `Close pad ${padId(pad.pad)}'s lane`);
@@ -962,6 +965,18 @@ function paintLane(canvas, width) {
   const xAt = (time) => ((time - state.windowStart) / span) * width;
   ctx.fillStyle = style.getPropertyValue("--line") || "#555";
   for (let time = state.windowStart; time < state.windowStart + span; time += state.resolution) ctx.fillRect(xAt(time), 0, 1, height);
+  if (parameter === VELOCITY_LANE) {
+    // A bar for each hit, as tall as its velocity.
+    const accent = style.getPropertyValue("--accent") || "#f80";
+    const barWidth = Math.max(3, Math.min(10, (state.resolution / span) * width * 0.5));
+    ctx.fillStyle = accent;
+    for (const hit of trackNotes()) {
+      if (hit.note !== note || hit.time < state.windowStart || hit.time >= state.windowStart + span) continue;
+      const bar = Math.max(2, hit.velocity * height);
+      ctx.fillRect(xAt(hit.time), height - bar, barWidth, bar);
+    }
+    return;
+  }
   // A knob holds its value until the next point, as the MPC plays it.
   const points = lanePoints().filter((p) => p.note === note && p.parameter === parameter).sort((a, b) => a.time - b.time);
   const mode = parameter === Xpj.FILTER.mode;
@@ -1004,8 +1019,37 @@ function setLanePoint(note, parameter, time, value, erase) {
   sequence().automation[track().name] = kept;
 }
 
+// Sets the velocity of the pad's hits the drag passes over, to the height of the pointer.
+function velocityStroke(event) {
+  const drag = state.laneDraw;
+  const box = drag.canvas.getBoundingClientRect();
+  const x = Math.max(0, Math.min(box.width, event.clientX - box.left));
+  const y = Math.max(0, Math.min(box.height, event.clientY - box.top));
+  const time = state.windowStart + (x / box.width) * state.windowSpan;
+  const velocity = Math.max(1, Math.round((1 - y / box.height) * 127));
+  // Covers everything between this point and the last, so a fast drag misses nothing,
+  // and a click catches the hit nearest it within half a step.
+  const from = drag.lastTime ?? time;
+  const low = Math.min(from, time) - (drag.lastTime === undefined ? state.resolution / 2 : 0);
+  const high = Math.max(from, time) + (drag.lastTime === undefined ? state.resolution / 2 : 0);
+  let changed = 0;
+  for (const hit of trackNotes()) {
+    if (hit.note === drag.note && hit.time >= low && hit.time <= high) {
+      hit.velocity = velocity / 127;
+      changed += 1;
+    }
+  }
+  drag.lastTime = time;
+  paintLane(drag.canvas, box.width);
+  setStatus(`Velocity ${velocity}${changed ? "" : ". Drag across the pad's hits to set them."}`);
+}
+
 function laneStroke(event) {
   const drag = state.laneDraw;
+  if (drag.parameter === VELOCITY_LANE) {
+    velocityStroke(event);
+    return;
+  }
   const box = drag.canvas.getBoundingClientRect();
   const x = Math.max(0, Math.min(box.width - 1, event.clientX - box.left));
   const y = Math.max(0, Math.min(box.height, event.clientY - box.top));
@@ -1624,7 +1668,10 @@ function fillNoteEditor() {
   $("edit-offset").max = maxOffset;
   $("edit-offset-range").textContent = `ticks, 0-${maxOffset}`;
   $("edit-probability").value = first.probability ?? 100;
-  for (const id of ["edit-velocity", "edit-length", "edit-offset", "edit-probability"]) {
+  const start = Math.min(...found.map((n) => n.time));
+  $("edit-pitch").value = pitchUnits(Xpj.PITCH.coarse, pitchAt(state.editor.note, Xpj.PITCH.coarse, start));
+  $("edit-fine").value = pitchUnits(Xpj.PITCH.fine, pitchAt(state.editor.note, Xpj.PITCH.fine, start));
+  for (const id of ["edit-velocity", "edit-length", "edit-offset", "edit-probability", "edit-pitch", "edit-fine"]) {
     $(id).setAttribute("aria-invalid", "false");
   }
 }
@@ -1655,6 +1702,39 @@ function editorNumber(id, low, high, apply) {
   const valid = input.value !== "" && Number.isInteger(value) && value >= low && value <= high;
   input.setAttribute("aria-invalid", String(!valid));
   if (valid) apply(value);
+}
+
+// The pitch a pad plays with at a time: the last point at or before it, or no change.
+function pitchAt(note, parameter, time) {
+  let value = 0.5;
+  for (const point of lanePoints()) {
+    if (point.note === note && point.parameter === parameter && point.time <= time) value = point.value;
+  }
+  return value;
+}
+
+/* Tunes the hit being edited by putting a pitch point at its start. The pad's next hit
+   gets a point back to the pitch it had before, so only this hit changes, unless there's
+   already a point in between. */
+function setStepPitch(parameter, units) {
+  const steps = PITCH_UNITS[parameter].steps;
+  const note = state.editor.note;
+  const start = Math.min(...editorNotes().map((n) => n.time));
+  const before = pitchAt(note, parameter, start - 1);
+  const value = 0.5 + units / steps;
+  changeEditorNotes(() => {
+    const points = editablePoints().filter((p) => !(p.note === note && p.parameter === parameter && p.time === start));
+    points.push({ time: start, note, parameter, value });
+    const next = trackNotes().filter((n) => n.note === note && n.time > start).sort((a, b) => a.time - b.time)[0];
+    if (next && !points.some((p) => p.note === note && p.parameter === parameter && p.time > start && p.time <= next.time)) {
+      points.push({ time: next.time, note, parameter, value: before });
+    }
+    sequence().automation[track().name] = points.sort((a, b) => a.time - b.time);
+  });
+  renderLane();
+  const pad = padForNote(note);
+  const lane = state.lanes.find((item) => item.note === note);
+  setStatus(`Pad ${padId(pad.pad)} at this hit: ${describeValue(parameter, value)}.${lane ? "" : " Its ~ lane shows its pitch."}`);
 }
 
 function setEditorVelocity(value) {
@@ -1693,6 +1773,12 @@ function bindNoteEditor() {
   });
   $("edit-offset").addEventListener("input", () => {
     editorNumber("edit-offset", 0, maxEditorOffset(editorNotes()), setEditorOffset);
+  });
+  $("edit-pitch").addEventListener("input", () => {
+    editorNumber("edit-pitch", -36, 36, (value) => setStepPitch(Xpj.PITCH.coarse, value));
+  });
+  $("edit-fine").addEventListener("input", () => {
+    editorNumber("edit-fine", -99, 99, (value) => setStepPitch(Xpj.PITCH.fine, value));
   });
   $("edit-probability").addEventListener("input", () => {
     editorNumber("edit-probability", 0, 100, (value) => {
