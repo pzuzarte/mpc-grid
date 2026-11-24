@@ -670,7 +670,7 @@ function renderGrid() {
     // Without a project file there is no way to know what is on the pad.
     name.textContent = pad.sample || (isBlank() ? `Note ${pad.note}` : "(no sample)");
     hear.append(id, name);
-    hear.addEventListener("pointerdown", () => audition(pad.note));
+    holdNoteOn(hear, pad.note);
     const mute = document.createElement("button");
     mute.type = "button";
     mute.className = "mute";
@@ -1514,7 +1514,7 @@ function setUpRecorder() {
       if (state.output) state.output.send([status | state.channel, note, velocity]);
     },
     isInstrument: (port) => /mpc/i.test(port.name),
-  }, { storageKey: "mpc-grid-record-input", button: $("record"), input: $("record-input"), channel: $("record-channel") });
+  }, { storageKey: "mpc-grid-record-input", button: $("record"), input: $("record-input"), channel: $("record-channel"), snap: $("record-snap") });
 }
 
 // Repeat hits sit back to back, so each note ends well before the next hit
@@ -1541,6 +1541,40 @@ function sendNote(note, velocity, atTime, lengthMs) {
     setStatus(`MIDI send failed: ${error.message}`, true);
     stop();
   }
+}
+
+// A note name plays its note for as long as it's held down.
+function holdNoteOn(element, note) {
+  element.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    if (!state.output) {
+      setStatus("No MIDI output connected.", true);
+      return;
+    }
+    const output = state.output;
+    const channel = state.channel;
+    const now = performance.now();
+    recorder.sent(note, now);
+    output.send([0x90 | channel, note, 127]);
+    element.classList.add("held");
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      output.send([0x80 | channel, note, 0]);
+      element.classList.remove("held");
+      for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) element.removeEventListener(type, release);
+    };
+    // Captures the pointer, so letting go anywhere ends the note.
+    try {
+      element.setPointerCapture(event.pointerId);
+    } catch {
+      // It still ends when let go over the name.
+    }
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) element.addEventListener(type, release);
+    // In case the grid is redrawn while the name is held.
+    window.addEventListener("pointerup", release, { once: true });
+  });
 }
 
 function audition(note, velocity = 1.0) {
@@ -1745,6 +1779,7 @@ function collectAssets() {
 }
 
 const link = Sync.connect({
+  startOff: true, // Each visit starts with Sync off.
   name: "MPC Grid",
   checkbox: $("sync"),
   storageKey: "mpc-grid-sync",

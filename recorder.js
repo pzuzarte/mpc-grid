@@ -1,6 +1,6 @@
 "use strict";
 /* Records notes into the grid from any MIDI input, on every channel or just one. While the
-   pattern plays, notes land on the nearest step and last as long as they're held, or a set length, and each
+   pattern plays, notes land where they're played, or on the nearest step with Snap, and last as long as they're held, or a set length, and each
    pass round the loop adds to the last. A click can be played on each beat. While stopped, each key adds a note and moves on a
    step. Notes from another keyboard are passed on to the instrument while recording, so you
    hear what you play. The same file is used by S-1 Grid, Protein Grid, Bass Station Grid and
@@ -25,11 +25,23 @@ const Recorder = (() => {
     return wrap(Math.round(pulse / resolution) * resolution, length);
   }
 
-  // How long a key was held, as played rather than rounded to steps, ending at the
-  // pattern's end at the latest. A quick tap still gets an eighth of a step.
+  // A held note ends where its key was let go, so when its start is snapped to a step the
+  // end stays where it was played. It ends at the pattern's end at the latest, and a quick
+  // tap, or one let go before the step it was snapped to, still gets an eighth of a step.
   function heldLength(fromPulse, toPulse, time, resolution, length) {
-    const held = Math.round(wrap(toPulse - fromPulse, length));
-    return Math.min(Math.max(Math.round(resolution / 8), held), length - time);
+    const held = wrap(toPulse - fromPulse, length);
+    const fromStart = wrap(toPulse - time, length);
+    const shortest = Math.round(resolution / 8);
+    // Snapping moves a start by half a step at most, so much more means it was let go first.
+    const sounded = fromStart > held + resolution ? shortest : Math.round(fromStart);
+    return Math.min(Math.max(shortest, sounded), length - time);
+  }
+
+  // Where a note played at this pulse lands: exactly where it was played, or on the
+  // nearest step.
+  function placeNote(pulse, snap, resolution, length) {
+    if (snap) return nearestStep(pulse, resolution, length);
+    return Math.min(length - 1, wrap(Math.round(pulse), length));
   }
 
   function readChoice(key) {
@@ -39,7 +51,7 @@ const Recorder = (() => {
     } catch {
       // Private windows can refuse storage, so the choice starts fresh.
     }
-    return { input: ANY, channel: 0 };
+    return { input: ANY, channel: 0, snap: false };
   }
 
   /* api supplies the pattern and how to show changes:
@@ -48,7 +60,7 @@ const Recorder = (() => {
      fixedLength(time) the length every recorded note gets, or null to keep how long it's held,
      begin() before a take, for Undo, added(item), lengthened(item), status(text, isError),
      thru(data) to pass a note to the instrument, and isInstrument(port), its own keys. */
-  function create(api, { storageKey, button, input, channel }) {
+  function create(api, { storageKey, button, input, channel, snap = null }) {
     const recorder = { on: false, choice: readChoice(storageKey) };
     const open = new Map();
     const passed = new Set();
@@ -110,7 +122,9 @@ const Recorder = (() => {
     function noteOn(note, velocity, at) {
       let time;
       if (api.playing()) {
-        time = nearestStep(api.pulseAt(at), api.resolution(), api.length());
+        // Without a Snap list, as in older pages, notes snap to steps.
+        const snapping = snap ? Boolean(recorder.choice.snap) : true;
+        time = placeNote(api.pulseAt(at), snapping, api.resolution(), api.length());
       } else {
         const chord = at - last < CHORD_WINDOW_MS;
         if (!chord && last) {
@@ -179,6 +193,14 @@ const Recorder = (() => {
       recorder.choice.channel = Number(channel.value);
       save();
     });
+    if (snap) {
+      snap.replaceChildren(new Option("Exact", "off"), new Option("Snap to steps", "on"));
+      snap.value = recorder.choice.snap ? "on" : "off";
+      snap.addEventListener("change", () => {
+        recorder.choice.snap = snap.value === "on";
+        save();
+      });
+    }
     recorder.refresh(null);
     render();
     return recorder;
@@ -240,7 +262,7 @@ const Recorder = (() => {
     return click;
   }
 
-  return { ANY, accepts, create, createClick, heldLength, nearestStep };
+  return { ANY, accepts, create, createClick, heldLength, nearestStep, placeNote };
 })();
 
 if (typeof module !== "undefined") module.exports = Recorder;

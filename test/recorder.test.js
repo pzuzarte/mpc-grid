@@ -27,11 +27,11 @@ global.Option = function Option(text, value) {
 const stored = new Map();
 global.localStorage = { getItem: (key) => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) };
 
-function setUp({ playing = true, fixed = null } = {}) {
+function setUp({ playing = true, fixed = null, snap = false } = {}) {
   const notes = [];
   const passed = [];
   const clock = { pulse: 0, playing };
-  const ui = { button: element(), input: element(), channel: element() };
+  const ui = { button: element(), input: element(), channel: element(), ...(snap ? { snap: element() } : {}) };
   const recorder = Recorder.create({
     notes: () => notes,
     makeNote: (fields) => ({ ...fields, probability: 100 }),
@@ -67,7 +67,8 @@ test("notes land on the nearest step, wrapping round the loop", () => {
   assert.equal(Recorder.nearestStep(LENGTH - 20, STEP, LENGTH), 0);
   assert.equal(Recorder.heldLength(LENGTH - STEP, STEP, LENGTH - STEP, STEP, LENGTH), STEP, "cut at the pattern's end");
   assert.equal(Recorder.heldLength(0, 700, 0, STEP, LENGTH), 700, "as held, not rounded to steps");
-  assert.equal(Recorder.heldLength(100, 105, 0, STEP, LENGTH), STEP / 8, "a quick tap");
+  assert.equal(Recorder.heldLength(100, 105, 100, STEP, LENGTH), STEP / 8, "a quick tap");
+  assert.equal(Recorder.heldLength(100, 105, 0, STEP, LENGTH), 105, "snapped back to its step, it still ends where it was let go");
 });
 
 test("each pass of the loop adds to the take, and held notes keep their length", () => {
@@ -81,7 +82,8 @@ test("each pass of the loop adds to the take, and held notes keep their length",
   clock.pulse = 4 * STEP; // Next time round, a different step.
   send("Keystep", [0x90, 64, 127]);
   send("Keystep", [0x90, 64, 0]);
-  assert.deepEqual(notes.map((n) => [n.time, n.note, n.length]), [[0, 60, 2 * STEP - 5], [4 * STEP, 64, STEP / 8]]);
+  // Snapped to step 1, it still ends where the key was let go.
+  assert.deepEqual(notes.map((n) => [n.time, n.note, n.length]), [[0, 60, 2 * STEP + 5], [4 * STEP, 64, STEP / 8]]);
   assert.equal(notes[1].velocity, 1);
   assert.equal(notes[0].probability, 100);
   recorder.toggle();
@@ -135,5 +137,29 @@ test("the chosen input and channel are remembered", () => {
   ui.input.fire("change");
   ui.channel.value = "5";
   ui.channel.fire("change");
-  assert.ok([...stored.values()].includes(JSON.stringify({ input: "Keystep", channel: 5 })));
+  assert.ok([...stored.values()].includes(JSON.stringify({ input: "Keystep", channel: 5, snap: false })));
+});
+
+test("with Snap off, notes land exactly where they're played and end where they're let go", () => {
+  const { notes, clock, ui, recorder, send } = setUp({ snap: true });
+  assert.equal(ui.snap.value, "off", "Exact is the default");
+  ui.button.fire("click");
+  clock.pulse = 250;
+  send("Keystep", [0x90, 60, 100]);
+  clock.pulse = 700;
+  send("Keystep", [0x80, 60, 0]);
+  assert.deepEqual(notes.map((n) => [n.time, n.length]), [[250, 450]]);
+  ui.snap.value = "on";
+  ui.snap.fire("change");
+  assert.equal(recorder.choice.snap, true);
+  clock.pulse = 1200;
+  send("Keystep", [0x90, 62, 100]);
+  clock.pulse = 1300;
+  send("Keystep", [0x80, 62, 0]);
+  assert.deepEqual(notes.map((n) => [n.time, n.length]), [[250, 450], [1200, 100]]);
+});
+
+test("a key let go before the step it snapped to gets the shortest length", () => {
+  assert.equal(Recorder.heldLength(220, 230, 240, STEP, LENGTH), STEP / 8);
+  assert.equal(Recorder.heldLength(220, 500, 240, STEP, LENGTH), 260);
 });

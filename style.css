@@ -431,3 +431,6 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 :root[data-theme="light"] #record[aria-pressed="true"] { color: #fff; background: #c62828; border-color: #c62828; }
 
 .theme-toggle { min-width: 2.2em; font-size: 1.05em; line-height: 1; }
+
+/* A note name being held down. */
+.held { background: var(--accent) !important; color: var(--accent-text) !important; }

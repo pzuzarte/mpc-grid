@@ -150,12 +150,14 @@ const Sync = (() => {
   function connect({
     name, checkbox, storageKey, start, stop, tempo, status, peers = () => {}, song = () => {}, songMoved = () => {},
     assets = null, assetsReceived = () => {}, loadAssets = null, assetsLoaded = () => {}, answers = {},
+    startOff = false,
   }) {
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
+    // A page can start with Sync off on every visit, until it's ticked.
     try {
-      checkbox.checked = localStorage.getItem(storageKey) !== "off";
+      checkbox.checked = !startOff && localStorage.getItem(storageKey) !== "off";
     } catch {
-      checkbox.checked = true;
+      checkbox.checked = !startOff;
     }
     const active = () => channel && checkbox.checked;
     const post = (message) => channel.postMessage({ ...message, from: name });
