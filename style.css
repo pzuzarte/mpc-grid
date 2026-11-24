@@ -420,3 +420,11 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .tool-menu nav button { height: auto; padding: 7px 10px; color: var(--text); text-align: left; background: none; border: 0; border-radius: 4px; font-size: 13px; }
 .tool-menu nav button:hover { background: var(--panel-2); }
 .tools { gap: 6px 10px; padding-top: 5px; padding-bottom: 5px; font-size: 12px; }
+
+/* Rec is red, and filled while recording. */
+#record { color: #e5484d; border-color: #e5484d; font-weight: 700; }
+#record[aria-pressed="true"] { color: #fff; background: #d63b3b; border-color: #d63b3b; }
+:root[data-theme="light"] #record { color: #c62828; border-color: #c62828; }
+:root[data-theme="light"] #record[aria-pressed="true"] { color: #fff; background: #c62828; border-color: #c62828; }
+
+.theme-toggle { min-width: 2.2em; font-size: 1.05em; line-height: 1; }

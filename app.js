@@ -1528,18 +1528,24 @@ function panic() {
   setStatus("All notes off.");
 }
 
-const THEME_KEY = "mpc-grid-theme";
+// Shared by all the grids, so switching one switches them all.
+const THEME_KEY = "midi-grids-theme";
 
 function setTheme(light) {
   if (light) document.documentElement.dataset.theme = "light";
   else delete document.documentElement.dataset.theme;
-  $("theme-toggle").textContent = light ? "Dark mode" : "Light mode";
+  $("theme-toggle").textContent = light ? "☾" : "☀";
   try {
     localStorage.setItem(THEME_KEY, light ? "light" : "dark");
   } catch {
     // It's just not remembered.
   }
 }
+
+// Follows a switch made on another grid open in this browser.
+window.addEventListener("storage", (event) => {
+  if (event.key === THEME_KEY && event.newValue) setTheme(event.newValue === "light");
+});
 
 /* ---------- Playback ---------- */
 

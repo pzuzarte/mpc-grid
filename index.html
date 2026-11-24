@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611231404">
+<link rel="stylesheet" href="style.css?v=202611232212">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
-  try { if (localStorage.getItem("mpc-grid-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
+  try { if ((localStorage.getItem("midi-grids-theme") || localStorage.getItem("mpc-grid-theme")) === "light") document.documentElement.dataset.theme = "light"; } catch {}
 </script>
 <!-- Counts visits anonymously. A fixed version with a checksum, and the tool works if it's blocked. -->
 <script data-goatcounter="https://pzuzarte.goatcounter.com/count"
@@ -43,10 +43,9 @@
       <a href="https://pzuzarte.github.io/td3-grid/" target="td3-grid">TD-3 Grid</a>
       <a href="https://pzuzarte.github.io/song-grid/" target="song-grid">Song Grid</a>
       <a href="https://pzuzarte.github.io/midi-hub/" target="midi-hub">MIDI Hub</a>
-      <hr>
-      <button id="theme-toggle" type="button" title="Switch between dark and light mode">Light mode</button>
     </nav>
   </details>
+  <button id="theme-toggle" class="theme-toggle" type="button" title="Switch between dark and light mode, for all the grids" aria-label="Dark or light mode">☀</button>
   <button id="help-open" type="button" title="Help (press ?)">Help</button>
 </header>
 
@@ -307,7 +306,7 @@
         <tr><th scope="row">Sync</th><td>Plays this page together with the other grids, S-1 Grid, Protein Grid, Bass Station Grid and TD-3 Grid, when they're open in the same browser, each with its MIDI connected and Sync ticked. Pressing Play or Stop on any of them starts or stops them all, from the start of their patterns, at the tempo of the page you pressed, and changing the BPM on one changes them all. The badge beside Sync shows which pages are linked. <a href="https://pzuzarte.github.io/song-grid/" target="song-grid">Song Grid</a> arranges their patterns into a song and plays them through Sync. The <b>Tools</b> menu at the top opens any of them.</td></tr>
         <tr><th scope="row">Send clock</th><td>Sends MIDI start, stop and clock with playback. Set MIDI Sync In to MIDI Clock on the MPC to follow it.</td></tr>
         <tr><th scope="row">Undo, Redo, Duplicate, Clear</th><td>Beside the sequences. Undo an edit, bring it back, copy the pattern to the next empty slot, or remove all of its notes.</td></tr>
-        <tr><th scope="row">Light mode</th><td>Switches between dark and light colours.</td></tr>
+        <tr><th scope="row">☀ / ☾</th><td>Switches between dark and light colours, for all the grids at once.</td></tr>
         <tr><th scope="row">Pad banks</th><td>Banks A-H hold 16 pads each. A dot means the bank has notes in this pattern. "In use" shows pads with samples or notes from any bank.</td></tr>
       </tbody>
     </table>
@@ -330,11 +329,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611231404"></script>
-<script src="backend.js?v=202611231404"></script>
-<script src="sync.js?v=202611231404"></script>
-<script src="recorder.js?v=202611231404"></script>
-<script src="app.js?v=202611231404"></script>
+<script src="xpj.js?v=202611232212"></script>
+<script src="backend.js?v=202611232212"></script>
+<script src="sync.js?v=202611232212"></script>
+<script src="recorder.js?v=202611232212"></script>
+<script src="app.js?v=202611232212"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {
