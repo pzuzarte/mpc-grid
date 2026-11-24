@@ -303,6 +303,9 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
   border-radius: 1px;
 }
 .note-handle:hover::after { width: 4px; background: var(--strong); }
+/* The left handle moves where a note starts. */
+.note-handle.note-start { left: -8px; right: auto; }
+.note-handle.note-start::after { left: 8px; right: auto; }
 .cell.on { cursor: ew-resize; }
 .cell.chance { outline: 1px dashed var(--strong); outline-offset: -3px; }
 .cell.editing { box-shadow: 0 0 0 2px var(--strong); z-index: 1; }

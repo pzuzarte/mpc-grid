@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611232212">
+<link rel="stylesheet" href="style.css?v=202611232240">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if ((localStorage.getItem("midi-grids-theme") || localStorage.getItem("mpc-grid-theme")) === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -184,7 +184,7 @@
   <button id="to-card" type="button">Copy to card</button>
   <button id="discard" type="button">Discard changes</button>
 </footer>
-<p class="hint">Click: add or remove a step. Drag from an empty step: draw a note. Drag a note: change its length. Cmd-drag: fill steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
+<p class="hint">Click: add or remove a step. Drag from an empty step: draw a note. Drag the left of a note: move its start. Drag the right of a note: change its length. Cmd-drag: fill steps. Right-click: edit a step. Shift-click: velocity. Alt-click: apply note repeat to a step. Click a pad name to hear it. Space: play and stop. T: triplets. 1-8: banks A-H.</p>
 <dialog id="send-dialog" class="help send-dialog" aria-labelledby="send-title">
   <div class="help-head">
     <h2 id="send-title">Record into MPC</h2>
@@ -269,7 +269,7 @@
         <tr><th scope="row">Click a step</th><td>Add or remove it. New steps use the New note length.</td></tr>
         <tr><th scope="row">Drag from an empty step</th><td>Draw one note as long as you drag. It snaps to the grid, or hold <kbd>Alt</kbd> for single ticks.</td></tr>
         <tr><th scope="row"><kbd>Cmd</kbd>-drag across steps</th><td>Fill separate steps. Dragging from a filled step removes steps instead.</td></tr>
-        <tr><th scope="row">Drag a note</th><td>Change where it ends, longer or shorter, from anywhere on its first step or its end marker. It moves in eighths of a step, or hold <kbd>Alt</kbd> for single ticks. A click that doesn't drag removes it.</td></tr>
+        <tr><th scope="row">Drag a note</th><td>Drag the left of its first step, or the marker at its start, to move where it starts, keeping its end where it is. Drag the rest of its first step, or the marker at its end, to change where it ends. Both move in eighths of a step, or hold <kbd>Alt</kbd> for single ticks. A click that doesn't drag removes it.</td></tr>
         <tr><th scope="row">Right-click a step<br><small>or Control-click on a Mac</small></th><td>Edit velocity, length, timing and probability. On an empty step, this adds the step first.</td></tr>
         <tr><th scope="row">Shift-click a step</th><td>Cycle velocity: full, 70%, 40%</td></tr>
         <tr><th scope="row">Alt-click a step<br><small>Option on a Mac</small></th><td>Apply the current Note repeat setting to that step</td></tr>
@@ -329,11 +329,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611232212"></script>
-<script src="backend.js?v=202611232212"></script>
-<script src="sync.js?v=202611232212"></script>
-<script src="recorder.js?v=202611232212"></script>
-<script src="app.js?v=202611232212"></script>
+<script src="xpj.js?v=202611232240"></script>
+<script src="backend.js?v=202611232240"></script>
+<script src="sync.js?v=202611232240"></script>
+<script src="recorder.js?v=202611232240"></script>
+<script src="app.js?v=202611232240"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {
