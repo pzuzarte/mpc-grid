@@ -875,7 +875,7 @@ function setPadFilter(pad, type) {
 // Opens or closes a pad's knob lane, on the knob it was last on, or cutoff.
 function toggleLane(note) {
   if (state.lanes.some((lane) => lane.note === note)) state.lanes = state.lanes.filter((lane) => lane.note !== note);
-  else state.lanes.push({ note, parameter: state.lastLaneParameter || Xpj.FILTER.cutoff });
+  else state.lanes.push({ note, parameter: state.lastLaneParameter ?? Xpj.FILTER.cutoff });
   renderGrid();
 }
 
