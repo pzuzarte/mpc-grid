@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPC Grid</title>
-<link rel="stylesheet" href="style.css?v=202611242345">
+<link rel="stylesheet" href="style.css?v=202611250012">
 <script>
   // Set before the page draws, so it doesn't flash the other theme.
   try { if ((localStorage.getItem("midi-grids-theme") || localStorage.getItem("mpc-grid-theme")) === "light") document.documentElement.dataset.theme = "light"; } catch {}
@@ -160,7 +160,7 @@
 
 <section id="lane" class="lane" aria-label="Knob lanes" hidden>
   <div class="lane-head">
-    <p class="lane-help">Drag to draw, Alt-drag to erase. A knob holds its value until the next point. Save keeps them in the project.</p>
+    <p class="lane-help">Drag to draw, Alt-drag to erase. Where nothing is drawn, the knob is at the pad's own setting. Save keeps them in the project.</p>
     <label class="lane-live" title="With the StemLoop mod loaded on the MPC, the pads' knobs move live as the lanes play and as you draw. Without it, the MPC plays the lanes once the project is saved.">
       <input id="live-knobs" type="checkbox" checked> Live knobs</label>
   </div>
@@ -356,11 +356,11 @@
     </ul>
   </div>
 </dialog>
-<script src="xpj.js?v=202611242345"></script>
-<script src="backend.js?v=202611242345"></script>
-<script src="sync.js?v=202611242345"></script>
-<script src="recorder.js?v=202611242345"></script>
-<script src="app.js?v=202611242345"></script>
+<script src="xpj.js?v=202611250012"></script>
+<script src="backend.js?v=202611250012"></script>
+<script src="sync.js?v=202611250012"></script>
+<script src="recorder.js?v=202611250012"></script>
+<script src="app.js?v=202611250012"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {

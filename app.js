@@ -993,9 +993,12 @@ function paintLane(canvas, width) {
   }
   ctx.font = "10px sans-serif";
   const end = sequence().lengthPulses;
+  const padRow = padForNote(note);
   points.forEach((point, index) => {
     const until = points[index + 1]?.time ?? end;
     if (until <= state.windowStart || point.time >= state.windowStart + span) return;
+    // Back on the pad's own setting shows as nothing drawn.
+    if (atBase(padRow, parameter, point.value)) return;
     const x0 = Math.max(0, xAt(point.time));
     const x1 = Math.min(width, xAt(until));
     // Pitch fills from the centre line, the rest from the bottom.
@@ -1011,6 +1014,55 @@ function paintLane(canvas, width) {
       ctx.fillText(MODES[modeIndex(point.value)].name, x0 + 3, 11);
     }
   });
+}
+
+// Whether a knob value is the pad's own setting, which an undrawn stretch plays at.
+function atBase(pad, parameter, value) {
+  const base = baseValue(pad, parameter);
+  if (parameter === Xpj.FILTER.mode) return modeIndex(value) === modeIndex(base);
+  return Math.abs(value - base) < 0.004;
+}
+
+/* Where nothing is drawn, a knob plays at the pad's own setting. The MPC holds a knob's
+   value until its next point, so after a stroke the slot just past it gets a point back at
+   the pad's own setting, and so does the start of the lane, before its first drawing.
+   Erasing puts the erased stretch back on the pad's own setting. */
+function addReturns(drag) {
+  if (drag.min === undefined || drag.parameter === VELOCITY_LANE) return;
+  const pad = padForNote(drag.note);
+  const base = baseValue(pad, drag.parameter);
+  const length = sequence().lengthPulses;
+  const lane = () => lanePoints().filter((p) => p.note === drag.note && p.parameter === drag.parameter)
+    .sort((a, b) => a.time - b.time);
+  const taken = (time) => lane().some((p) => p.time >= time && p.time < time + LANE_TICKS);
+  const heldAt = (time) => {
+    let value = null;
+    for (const point of lane()) {
+      if (point.time > time) break;
+      value = point.value;
+    }
+    return value;
+  };
+  // A lane drawn here sits on the 1/16-beat slots; one recorded on the MPC doesn't, and
+  // keeps holding between its points. Drawn before this change, a lane may hold over
+  // gaps, so its gaps go back to the pad's own setting too.
+  if (lane().every((p) => p.time % LANE_TICKS === 0)) {
+    for (const point of lane()) {
+      const next = point.time + LANE_TICKS;
+      if (next < length && !atBase(pad, drag.parameter, point.value) && !taken(next)) {
+        setLanePoint(drag.note, drag.parameter, next, base, false);
+      }
+    }
+  }
+  if (!drag.erase) {
+    const after = drag.max + LANE_TICKS;
+    if (after < length && !taken(after)) setLanePoint(drag.note, drag.parameter, after, base, false);
+  } else if (!taken(drag.min)) {
+    const held = heldAt(drag.min);
+    if (held !== null && !atBase(pad, drag.parameter, held)) setLanePoint(drag.note, drag.parameter, drag.min, base, false);
+  }
+  const first = lane()[0];
+  if (first && first.time > 0 && !taken(0)) setLanePoint(drag.note, drag.parameter, 0, base, false);
 }
 
 // Sets or erases a pad's knob at one point, replacing any point within its 1/16 beat.
@@ -1079,7 +1131,10 @@ function laneStroke(event) {
   for (let index = 0; index <= count; index += 1) {
     const between = count ? index / count : 1;
     const v = mode ? value : snap(startValue + (value - startValue) * between);
-    setLanePoint(drag.note, drag.parameter, from + index * step, v, drag.erase);
+    const slot = from + index * step;
+    setLanePoint(drag.note, drag.parameter, slot, v, drag.erase);
+    drag.min = Math.min(drag.min ?? slot, slot);
+    drag.max = Math.max(drag.max ?? slot, slot);
   }
   drag.last = { time, value };
   // Heard as it's drawn, with the StemLoop mod on the MPC.
@@ -1098,7 +1153,8 @@ function clearLane(lane) {
   remember();
   editablePoints();
   sequence().automation[track().name] = kept;
-  if (!state.playing) restoreLive();
+  // The pad's knob goes straight back to its own setting.
+  restoreLiveLane(lane.note, lane.parameter);
   markDirty();
   renderGrid();
   setStatus(`Cleared ${padId(padForNote(lane.note).pad)}'s ${PARAM_NAMES[lane.parameter].toLowerCase()}. Undo brings it back.`);
@@ -1122,11 +1178,16 @@ function bindLane() {
     const drag = state.laneDraw;
     if (!drag) return;
     state.laneDraw = null;
+    addReturns(drag);
     markDirty();
     renderGrid();
     turnFilterOnFor(drag);
-    // Stopped, a drawn knob is only heard while drawing; playing, the lane carries on.
+    // Stopped, a drawn knob is only heard while drawing; playing, the lane carries on,
+    // unless it was all erased.
     if (!state.playing) restoreLive();
+    else if (!lanePoints().some((p) => p.note === drag.note && p.parameter === drag.parameter)) {
+      restoreLiveLane(drag.note, drag.parameter);
+    }
   };
   rows.addEventListener("pointerup", finish);
   rows.addEventListener("pointercancel", finish);
@@ -2212,6 +2273,17 @@ function restoreLive(keep = new Map(), atTime) {
       // As in sendLive.
     }
   }
+}
+
+// Puts one pad's knob back to its own setting, as its lane has gone. While playing,
+// after what's already scheduled for it.
+function restoreLiveLane(note, parameter) {
+  if (!LIVE_PARAMETERS.has(parameter)) return;
+  const pad = padForNote(note);
+  const key = liveKey(pad.pad, parameter);
+  if (!state.liveSent.has(key)) return;
+  const keep = new Map([...state.liveSent].filter(([other]) => other !== key));
+  restoreLive(keep, state.playing ? performance.now() + SCHEDULE_AHEAD_MS + 20 : undefined);
 }
 
 // The knobs as they are at `pulse`, for starting playback there.
