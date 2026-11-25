@@ -796,7 +796,9 @@ function renderGrid() {
     mute.setAttribute("aria-pressed", String(muted));
     mute.addEventListener("click", () => toggleMute(pad));
     const open = state.lanes.some((lane) => lane.note === pad.note);
-    const moved = (sequence()?.automation?.[track().name] || []).some((point) => point.note === pad.note);
+    // Drawn knob movements; the snap-back points at the pad's own setting don't count.
+    const moved = (sequence()?.automation?.[track().name] || [])
+      .some((point) => point.note === pad.note && !atBase(pad, point.parameter, point.value));
     const laneButton = document.createElement("button");
     laneButton.type = "button";
     laneButton.className = "lane-button";

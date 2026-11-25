@@ -242,7 +242,7 @@ button.primary { min-width: 72px; background: var(--accent); border-color: var(-
 .mute[aria-pressed="true"] { background: #e0a526; border-color: #e0a526; color: #1a1a1a; }
 /* Opens the pad's knob lane under the grid. Marked when the pad has movements. */
 .lane-button { flex: none; width: 22px; height: 100%; min-height: 0; padding: 0; background: var(--panel); border-radius: 4px; color: var(--muted); font-size: 12px; }
-.lane-button.moved { color: var(--accent); }
+.lane-button.moved { color: #1b1e24; background: var(--warn); border-color: var(--warn); }
 .lane-button[aria-pressed="true"] { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
 .pad-label.muted .pad { opacity: 0.5; }
 .cell.muted { opacity: 0.35; }
