@@ -46,6 +46,8 @@ const state = {
   editor: null,
   lanes: [], // Pads with a knob lane open under the grid: { note, parameter }.
   padFilters: {}, // Pads' own filter modes changed here and not saved yet: { track: { pad: type } }.
+  sysex: false, // Whether Chrome allowed SysEx, which live knobs need.
+  liveSent: new Map(), // Knobs moved live on the MPC: key -> { pad, parameter }.
   laneDraw: null,
   dirty: new Set(),
   undo: [],
@@ -868,6 +870,7 @@ function setPadFilter(pad, type) {
   pad.filterType = type;
   state.padFilters[track().name] ??= {};
   state.padFilters[track().name][pad.pad] = type;
+  sendLive([{ pad: pad.pad, parameter: Xpj.FILTER.mode, value: type / Xpj.MODE_SCALE }]);
   markDirty();
   setStatus(`Pad ${padId(pad.pad)} plays with the ${MODES.find((item) => item.type === type).name} filter. Save or Copy to card keeps it in the project.`);
 }
@@ -1079,6 +1082,10 @@ function laneStroke(event) {
     setLanePoint(drag.note, drag.parameter, from + index * step, v, drag.erase);
   }
   drag.last = { time, value };
+  // Heard as it's drawn, with the StemLoop mod on the MPC.
+  if (!drag.erase && LIVE_PARAMETERS.has(drag.parameter)) {
+    sendLive([{ pad: padForNote(drag.note).pad, parameter: drag.parameter, value }]);
+  }
   paintLane(drag.canvas, box.width);
   const name = PARAM_NAMES[drag.parameter];
   setStatus(drag.erase ? `Erasing ${name.toLowerCase()}.` : `${name}: ${describeValue(drag.parameter, value)}.`);
@@ -1091,6 +1098,7 @@ function clearLane(lane) {
   remember();
   editablePoints();
   sequence().automation[track().name] = kept;
+  if (!state.playing) restoreLive();
   markDirty();
   renderGrid();
   setStatus(`Cleared ${padId(padForNote(lane.note).pad)}'s ${PARAM_NAMES[lane.parameter].toLowerCase()}. Undo brings it back.`);
@@ -1111,13 +1119,29 @@ function bindLane() {
     if (state.laneDraw) laneStroke(event);
   });
   const finish = () => {
-    if (!state.laneDraw) return;
+    const drag = state.laneDraw;
+    if (!drag) return;
     state.laneDraw = null;
     markDirty();
     renderGrid();
+    turnFilterOnFor(drag);
+    // Stopped, a drawn knob is only heard while drawing; playing, the lane carries on.
+    if (!state.playing) restoreLive();
   };
   rows.addEventListener("pointerup", finish);
   rows.addEventListener("pointercancel", finish);
+}
+
+// Cutoff and resonance do nothing while a pad's filter is Off, so drawing them turns
+// the pad's filter on, as Classic, the MPC's own default.
+const CLASSIC_FILTER = 29;
+function turnFilterOnFor(drag) {
+  if (drag.erase || (drag.parameter !== Xpj.FILTER.cutoff && drag.parameter !== Xpj.FILTER.resonance)) return;
+  const pad = padForNote(drag.note);
+  if (pad.filterType !== 0) return;
+  setPadFilter(pad, CLASSIC_FILTER);
+  renderGrid();
+  setStatus(`Pad ${padId(pad.pad)}'s filter was Off, so its ${PARAM_NAMES[drag.parameter].toLowerCase()} couldn't be heard. It's now on Classic; pick another Filter Mode beside the pad if you like.`);
 }
 
 // Muting goes by note, as that's what plays the pad on the MPC.
@@ -1913,10 +1937,18 @@ async function initMidi() {
     return;
   }
   try {
-    state.midi = await navigator.requestMIDIAccess({ sysex: false });
-  } catch (error) {
-    setMidiPill("MIDI permission denied", "warn");
-    return;
+    // SysEx carries the live knob values to the StemLoop mod. Without it, everything
+    // else still works.
+    state.midi = await navigator.requestMIDIAccess({ sysex: true });
+    state.sysex = true;
+  } catch {
+    try {
+      state.midi = await navigator.requestMIDIAccess({ sysex: false });
+      state.sysex = false;
+    } catch (error) {
+      setMidiPill("MIDI permission denied", "warn");
+      return;
+    }
   }
   state.midi.onstatechange = refreshOutputs;
   refreshOutputs();
@@ -2089,6 +2121,152 @@ function sendController(number, value, atTime) {
   else state.output.send(message, atTime);
 }
 
+/* ---------- Live knobs ----------
+   The MPC can't follow knob lanes over MIDI, so with the StemLoop mod loaded on the MPC,
+   lane values are sent as SysEx, F0 7D 4D 47 01 (pad, parameter hi, lo, value hi, lo)... F7,
+   and the mod turns that pad's knob through the MPC's own control, as its knobs would.
+   Without the mod the MPC ignores them. When playback stops, or a lane goes, each pad's
+   knobs go back to its own settings. */
+const LIVE_HEADER = [0xF0, 0x7D, 0x4D, 0x47, 0x01];
+const LIVE_PARAMETERS = new Set([514, 515, 1082, 1043, 1044]);
+const liveKey = (pad, parameter) => `${pad}:${parameter}`;
+
+const liveOn = () => Boolean(state.output && state.sysex && $("live-knobs")?.checked);
+
+// The value a pad's knob has when no lane moves it.
+function baseValue(pad, parameter) {
+  switch (parameter) {
+    case Xpj.FILTER.cutoff: return pad.cutoff ?? 1;
+    case Xpj.FILTER.resonance: return pad.resonance ?? 0;
+    case Xpj.FILTER.mode: return (Number.isInteger(pad.filterType) ? pad.filterType : 0) / Xpj.MODE_SCALE;
+    case Xpj.PITCH.coarse: return 0.5 + (pad.coarseTune ?? 0) / PITCH_UNITS[Xpj.PITCH.coarse].steps;
+    case Xpj.PITCH.fine: return 0.5 + (pad.fineTune ?? 0) / PITCH_UNITS[Xpj.PITCH.fine].steps;
+    default: return 0;
+  }
+}
+
+// sets: [{ pad, parameter, value }] with pad the pad's index.
+function sendLive(sets, atTime) {
+  if (!liveOn() || !sets.length) return;
+  const bytes = [...LIVE_HEADER];
+  for (const { pad, parameter, value } of sets) {
+    const level = Math.round(Math.max(0, Math.min(1, value)) * 16383);
+    bytes.push(pad & 0x7F, (parameter >> 7) & 0x7F, parameter & 0x7F, level >> 7, level & 0x7F);
+    state.liveSent.set(liveKey(pad, parameter), { pad, parameter });
+  }
+  bytes.push(0xF7);
+  try {
+    if (atTime === undefined) state.output.send(bytes);
+    else state.output.send(bytes, atTime);
+  } catch {
+    // An output that doesn't take SysEx just goes without live knobs.
+  }
+}
+
+// The sequence's knob lanes that the MPC can turn, each with its points in time order.
+function liveLanes(seq) {
+  const lanes = new Map();
+  for (const point of seq?.automation?.[track().name] || []) {
+    if (!LIVE_PARAMETERS.has(point.parameter)) continue;
+    const pad = padForNote(point.note);
+    const key = liveKey(pad.pad, point.parameter);
+    if (!lanes.has(key)) lanes.set(key, { pad: pad.pad, parameter: point.parameter, points: [] });
+    lanes.get(key).points.push(point);
+  }
+  for (const lane of lanes.values()) lane.points.sort((a, b) => a.time - b.time);
+  return lanes;
+}
+
+// A lane's value at a time: its last point by then, or before its first point, the
+// first point's value, as the saved project starts the lane with it.
+function laneValueAt(points, time) {
+  let value = points[0].value;
+  for (const point of points) {
+    if (point.time > time) break;
+    value = point.value;
+  }
+  return value;
+}
+
+// Puts back the pads' own settings for knobs the lanes moved, except those in `keep`.
+function restoreLive(keep = new Map(), atTime) {
+  const sets = [];
+  for (const [key, { pad, parameter }] of state.liveSent) {
+    if (keep.has(key)) continue;
+    const padRow = track().pads.find((item) => item.pad === pad);
+    if (padRow) sets.push({ pad, parameter, value: baseValue(padRow, parameter) });
+    state.liveSent.delete(key);
+  }
+  if (sets.length && state.output && state.sysex) {
+    // Sent even with Live knobs just turned off, so nothing is left moved.
+    const bytes = [...LIVE_HEADER];
+    for (const { pad, parameter, value } of sets) {
+      const level = Math.round(Math.max(0, Math.min(1, value)) * 16383);
+      bytes.push(pad & 0x7F, (parameter >> 7) & 0x7F, parameter & 0x7F, level >> 7, level & 0x7F);
+    }
+    bytes.push(0xF7);
+    try {
+      if (atTime === undefined) state.output.send(bytes);
+      else state.output.send(bytes, atTime);
+    } catch {
+      // As in sendLive.
+    }
+  }
+}
+
+// The knobs as they are at `pulse`, for starting playback there.
+function liveAt(seq, pulse, atTime) {
+  const lanes = liveLanes(seq);
+  restoreLive(lanes, atTime);
+  sendLive([...lanes.values()].map((lane) => ({ pad: lane.pad, parameter: lane.parameter, value: laneValueAt(lane.points, pulse) })), atTime);
+}
+
+// The lane points in one stretch of playback, sent at their times.
+function scheduleLive(seq, from, to, startTime, ms) {
+  if (!liveOn()) return;
+  const lanes = liveLanes(seq);
+  if (from === 0) {
+    // Each time round, the lanes start again, and pads whose lanes went go back.
+    liveAt(seq, 0, startTime);
+    return scheduleLivePoints(lanes, 1, to, from, startTime, ms);
+  }
+  scheduleLivePoints(lanes, from, to, from, startTime, ms);
+}
+
+function scheduleLivePoints(lanes, first, to, from, startTime, ms) {
+  const byTime = new Map();
+  for (const lane of lanes.values()) {
+    for (const point of lane.points) {
+      if (point.time < first || point.time >= to) continue;
+      if (!byTime.has(point.time)) byTime.set(point.time, []);
+      byTime.get(point.time).push({ pad: lane.pad, parameter: lane.parameter, value: point.value });
+    }
+  }
+  for (const [time, sets] of byTime) sendLive(sets, startTime + (time - from) * ms);
+}
+
+const LIVE_KEY = "mpc-grid-live-knobs";
+function bindLiveKnobs() {
+  const box = $("live-knobs");
+  try {
+    box.checked = localStorage.getItem(LIVE_KEY) !== "off";
+  } catch {
+    box.checked = true;
+  }
+  box.addEventListener("change", () => {
+    try {
+      localStorage.setItem(LIVE_KEY, box.checked ? "on" : "off");
+    } catch {
+      // Remembering the choice is only a convenience.
+    }
+    if (!box.checked) restoreLive();
+    else if (!state.sysex) setStatus("Live knobs need Chrome to allow SysEx for this page: allow it in the site settings, then reload.", true);
+    else setStatus("Live knobs on: the MPC turns the pads' knobs as the lanes play, with the StemLoop mod loaded.");
+  });
+  // Leaving the page puts the pads back.
+  window.addEventListener("pagehide", () => restoreLive());
+}
+
 const CC_ALL_SOUND_OFF = 120;
 const CC_ALL_NOTES_OFF = 123;
 
@@ -2192,6 +2370,7 @@ function schedule() {
           state.nextTime + (note.time - from) * ms, heldPulses(seq, note) * ms);
       }
     }
+    if (!song?.muted) scheduleLive(seq, from, to, state.nextTime, ms);
     state.nextTime += CHUNK_PULSES * ms;
     if (song) song.pulse += CHUNK_PULSES;
     state.nextPulse = to >= seq.lengthPulses ? 0 : to;
@@ -2433,6 +2612,8 @@ function stop({ fromLink = false } = {}) {
   if (!fromLink) link.announceStop();
   if (sendingClock() && state.output) state.output.send([0xFC]);
   state.playing = false;
+  // After anything already scheduled, so the pads end up back on their own settings.
+  restoreLive(new Map(), performance.now() + SCHEDULE_AHEAD_MS + 20);
   $("play").textContent = "Play";
   $("playhead").hidden = true;
   renderSlots();
@@ -2547,6 +2728,7 @@ function bindControls() {
   $("library").addEventListener("click", chooseLibrary);
   $("project-save").addEventListener("click", saveProject);
   bindLane();
+  bindLiveKnobs();
   $("sequence-name").addEventListener("change", (event) => renameSequence(event.target.value));
   $("grid-title").addEventListener("click", () => {
     const seq = sequence();

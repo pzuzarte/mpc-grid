@@ -144,8 +144,15 @@ const Xpj = (() => {
         if (sample) break;
       }
       // The filter mode the pad plays with, unless a sequence's movements change it.
-      const filterType = num(instrument.synthSection?.filterData?.value0?.filterType);
-      rows.push({ pad, note, sample, filterType: Number.isInteger(filterType) ? filterType : null });
+      const filter = instrument.synthSection?.filterData?.value0;
+      const filterType = num(filter?.filterType);
+      // The pad's own knob settings, which its lanes move away from and back to.
+      const setting = (value, fallback) => (Number.isFinite(num(value)) ? num(value) : fallback);
+      rows.push({
+        pad, note, sample, filterType: Number.isInteger(filterType) ? filterType : null,
+        cutoff: setting(filter?.filterCutoff, 1), resonance: setting(filter?.filterResonance, 0),
+        coarseTune: setting(instrument.coarseTune, 0), fineTune: setting(instrument.fineTune, 0),
+      });
     });
     return rows;
   }

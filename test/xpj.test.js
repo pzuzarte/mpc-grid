@@ -43,7 +43,7 @@ test("a project that can't be reproduced exactly can be viewed but not saved", a
 test("view lists drum tracks, pads, notes and tempo as plain numbers", async () => {
   const view = Xpj.view(await makeProject());
   assert.deepEqual(view.tracks.map((t) => t.name), ["Drum 001"]);
-  assert.deepEqual(view.tracks[0].pads[0], { pad: 0, note: 36, sample: "Kick", filterType: null });
+  assert.deepEqual(view.tracks[0].pads[0], { pad: 0, note: 36, sample: "Kick", filterType: null, cutoff: 1, resonance: 0, coarseTune: 0, fineTune: 0 });
   assert.deepEqual(view.sequences[0].notes["Drum 001"], [
     { time: 0, note: 36, velocity: 1, length: 100, probability: 50 },
   ]);
