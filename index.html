@@ -21,8 +21,6 @@
   <label>Project
     <select id="project"></select>
   </label>
-  <button id="library" type="button">Choose library folder</button>
-  <span id="library-state" class="pill">Library: in this browser</span>
   <button id="card" type="button">Connect card</button>
   <span id="card-state" class="pill">Card: not connected</span>
   <div class="spacer"></div>
@@ -46,14 +44,17 @@
     </nav>
   </details>
   <button id="theme-toggle" class="theme-toggle" type="button" title="Switch between dark and light mode, for all the grids" aria-label="Dark or light mode">☀</button>
-  <button id="help-open" type="button" title="Help (press ?)">Help</button>
+  <button id="help-open" type="button" title="Help (press ?)" data-icon="help">Help</button>
 </header>
 
 <section class="bar name-bar" aria-label="This project">
   <span class="group-label">Project</span>
   <strong id="pattern-name" class="pattern-name untitled">No project</strong>
-  <button id="project-save" class="primary" type="button" title="Save your changes into this project (Cmd+S): on the card when it's there and connected, otherwise in your library, keeping a backup">Save</button>
-  <button id="project-save-as" type="button" title="Save your changes as a new project in your library, with a name you choose (Cmd+Shift+S)">Save as&hellip;</button>
+  <button id="project-save" class="primary" type="button" title="Save your changes into this project (Cmd+S): on the card when it's there and connected, otherwise in your library, keeping a backup" data-icon="save">Save</button>
+  <button id="project-save-as" type="button" title="Save your changes as a new project in your library, with a name you choose (Cmd+Shift+S)" data-icon="save-as">Save as&hellip;</button>
+  <div class="spacer"></div>
+  <span id="library-state" class="pill library-where">Library: in this browser</span>
+  <button id="library" type="button" data-icon="folder">Choose library folder</button>
 </section>
 
 <section class="bar slots-bar" aria-label="Sequences">
@@ -63,15 +64,15 @@
     <input id="sequence-name" type="text" maxlength="32" spellcheck="false" aria-label="Sequence name">
   </label>
   <div class="spacer"></div>
-  <button id="undo" type="button" title="Undo (Cmd+Z)" disabled>Undo</button>
-  <button id="redo" type="button" title="Redo (Cmd+Shift+Z)" disabled>Redo</button>
-  <button id="duplicate" type="button" title="Copy this pattern to the next empty sequence">Duplicate</button>
-  <button id="clear" type="button">Clear</button>
+  <button id="undo" type="button" title="Undo (Cmd+Z)" disabled data-icon="undo">Undo</button>
+  <button id="redo" type="button" title="Redo (Cmd+Shift+Z)" disabled data-icon="redo">Redo</button>
+  <button id="duplicate" type="button" title="Copy this pattern to the next empty sequence" data-icon="duplicate">Duplicate</button>
+  <button id="clear" type="button" data-icon="clear">Clear</button>
 </section>
 
 <section class="bar transport" aria-label="Transport and pattern settings">
-  <button id="play" class="primary" type="button">Play</button>
-  <button id="stop-all" type="button" title="Stops playback and silences any stuck notes">Panic</button>
+  <button id="play" class="primary" type="button" data-icon="auto">Play</button>
+  <button id="stop-all" type="button" title="Stops playback and silences any stuck notes" data-icon="panic">Panic</button>
   <label title="Sets playback speed from the laptop. It is not saved to the project.">BPM
     <input id="bpm" type="number" min="20" max="300" step="0.1" value="120">
   </label>
@@ -82,7 +83,7 @@
   <label class="check" title="Set MIDI Sync In to MIDI Clock on the MPC to follow the laptop.">
     <input id="clock" type="checkbox"> Send clock
   </label>
-  <button id="click" class="toggle" type="button" aria-pressed="false" title="A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It plays from this computer, not the instrument.">Click</button>
+  <button id="click" class="toggle" type="button" aria-pressed="false" title="A metronome click on each beat while the pattern plays, louder on the first beat of each bar. It plays from this computer, not the instrument." data-icon="click">Click</button>
   <button id="send" type="button" title="Records this track's notes into a sequence on the MPC, by playing the loop once while the MPC records. Shows how to set the MPC up first.">Record into MPC</button>
   <span class="divider" aria-hidden="true"></span>
   <label>Bars
@@ -111,8 +112,8 @@
 
 <section class="bar tools" aria-label="Pattern tools">
   <div class="button-pair">
-    <button id="shift-left" type="button" title="Move every note on this track one step earlier, wrapping around" aria-label="Move earlier">Shift &lt;</button>
-    <button id="shift-right" type="button" title="Move every note on this track one step later, wrapping around" aria-label="Move later">Shift &gt;</button>
+    <button id="shift-left" type="button" title="Move every note on this track one step earlier, wrapping around" aria-label="Move earlier" data-icon="shift-left">Shift &lt;</button>
+    <button id="shift-right" type="button" title="Move every note on this track one step later, wrapping around" aria-label="Move later" data-icon="shift-right">Shift &gt;</button>
   </div>
   <span class="divider" aria-hidden="true"></span>
   <div class="field" role="group" aria-labelledby="repeat-label">
@@ -127,7 +128,7 @@
     </div>
   </div>
   <div class="field" role="group" aria-label="Recording">
-    <button id="record" class="toggle" type="button" aria-pressed="false" title="Record notes into this sequence from the chosen input. Press Play to record in time as the pattern loops, or just press pads or keys to add them step by step.">Rec</button>
+    <button id="record" class="toggle" type="button" aria-pressed="false" title="Record notes into this sequence from the chosen input. Press Play to record in time as the pattern loops, or just press pads or keys to add them step by step." data-icon="auto">Rec</button>
     <select id="record-input" aria-label="Record from" title="The keyboard, pads or instrument to record from"></select>
     <select id="record-channel" aria-label="Record channel" title="The MIDI channel to record, or any"></select>
     <select id="record-snap" aria-label="Where recorded notes land" title="Exact keeps each recorded note where you played it. Snap to steps moves it to the nearest step. Either way, it ends where you let go."></select>
@@ -261,7 +262,7 @@
     <p>Once a project is open, it's kept in your library, so you can edit and play it in MIDI mode. You only need SD mode to move projects.</p>
     <h3>Your library folder</h3>
     <p>Click <b>Choose library folder</b> and pick or make a folder on this computer, such as <code>Documents/MPC Library</code>. Projects you open from the card, the new projects you save, and backups (in a <code>backups</code> folder) are kept there as normal MPC project files, so you can see them, back them up and copy them. Projects already kept in this browser are copied into it. Until you choose a folder, the library is kept privately in this browser.</p>
-    <p>On later visits the browser may ask again: click <b>Allow library access</b>. Each computer has its own library folder. Choose a folder on the computer, not the card.</p>
+    <p>The button is at the end of the row with Save, and the label beside it shows which folder is in use. <b>Change library folder</b> moves to another one. It can be any folder on this computer, or one in Google Drive or the like to reach your library from other computers too; the page remembers it and saves there from then on. On later visits the browser may ask again: click <b>Allow library folder</b>. Choose a folder on the computer, not the card.</p>
     <p><b>Before leaving SD mode:</b> eject the card on your computer, then press <kbd>B1</kbd> on the MPC.</p>
 
     <h3>Open a project from the MPC</h3>
@@ -360,7 +361,9 @@
 <script src="backend.js?v=202611251200"></script>
 <script src="sync.js?v=202611251200"></script>
 <script src="recorder.js?v=202611251200"></script>
-<script src="app.js?v=202611251200"></script>
+<script src="library-button.js?v=202611261000"></script>
+<script src="grid-icons.js?v=202611261000"></script>
+<script src="app.js?v=202611261000"></script>
 <script>
   // The tools menu closes when you click elsewhere or press Escape.
   document.addEventListener("click", (event) => {

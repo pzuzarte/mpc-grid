@@ -145,16 +145,12 @@ function renderLibraryState(info) {
   const views = {
     browser: ["Choose library folder", "Library: in this browser", "warn",
       "Projects are kept privately in this browser. Choose a folder to keep them as files on this computer."],
-    permission: ["Allow library access", `Library: ${info.name} needs permission`, "warn",
+    permission: ["Allow library folder", `Library: ${info.name} needs permission`, "warn",
       "The browser needs your permission again to use the library folder."],
     ready: ["Change library folder", `Library: ${info.name}`, "ok", "Projects are kept as files in this folder."],
   };
-  const [button, text, kind, title] = views[info.status];
-  $("library").textContent = button;
-  $("library").dataset.status = info.status;
-  $("library-state").textContent = text;
-  $("library-state").className = `pill ${kind}`;
-  $("library-state").title = title;
+  LibraryButton.render($("library"), $("library-state"), info.status, info.name);
+  $("library-state").title = views[info.status][3];
   state.libraryName = info.status === "ready" ? info.name : "";
 }
 
@@ -2902,7 +2898,7 @@ async function start() {
     : NO_PROJECT_MESSAGE);
   await refreshProjects();
   if ($("library").dataset.status === "permission") {
-    setStatus("Click Allow library access at the top to open your projects again.");
+    setStatus("Click Allow library folder, beside Save, to open your projects again.");
   }
   const last = lastProject();
   if (last && [...$("project").options].some((o) => o.value === last)) {
