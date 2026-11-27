@@ -34,5 +34,15 @@ const LibraryButton = (() => {
     }
   }
 
-  return { render, WORDS };
+  // What Song Grid's Add list says when this grid's library can't be read yet: the step
+  // to take in this grid, by its state.
+  function songNote(status, grid, what) {
+    if (status === "ready") return "";
+    if (status === "permission") return `Click Allow library folder in ${grid} to pick from its ${what} too.`;
+    if (status === "unsupported") return `${grid} can't use a library folder in this browser, so only what's in the grid now is listed.`;
+    if (status === "missing") return `${grid} can't find its library folder. Click Choose library folder there to pick from its ${what} too.`;
+    return `Click Choose library folder in ${grid} to pick from its ${what} too.`;
+  }
+
+  return { render, songNote, WORDS };
 })();
